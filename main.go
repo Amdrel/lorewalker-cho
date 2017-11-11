@@ -25,16 +25,17 @@ import (
 	"syscall"
 
 	"github.com/bwmarrin/discordgo"
-	redis "gopkg.in/redis.v3"
+	"github.com/go-redis/redis"
 )
 
 var (
 	// Command-line flags are stored here after being parsed.
 	flags struct {
-		Token      string
-		Redis      string
-		Shard      int
-		ShardCount int
+		Token         string
+		Redis         string
+		RedisPassword string
+		ShardID       int
+		ShardCount    int
 	}
 
 	discord *discordgo.Session
@@ -43,14 +44,15 @@ var (
 
 func init() {
 	var (
-		Shard      string
+		ShardID    string
 		ShardCount string
 		err        error
 	)
 
 	flag.StringVar(&flags.Token, "t", "", "Bot Token")
 	flag.StringVar(&flags.Redis, "r", "", "Redis Connection String")
-	flag.StringVar(&Shard, "s", "0", "Shard ID")
+	flag.StringVar(&flags.RedisPassword, "p", "", "Optional Redis Password")
+	flag.StringVar(&ShardID, "s", "0", "Shard ID")
 	flag.StringVar(&ShardCount, "c", "1", "Number of shards")
 	flag.Parse()
 
@@ -58,15 +60,13 @@ func init() {
 		log.Fatalln("A token must be provided to start Cho.")
 	} else if len(flags.Redis) == 0 {
 		log.Fatalln("A redis connection string must be provided.")
-	} else if flags.Shard, err = strconv.Atoi(Shard); err != nil {
+	} else if flags.ShardID, err = strconv.Atoi(ShardID); err != nil {
 		log.Fatalln("Invalid shard id passed.")
 	} else if flags.ShardCount, err = strconv.Atoi(ShardCount); err != nil {
 		log.Fatalln("Invalid shard count passed.")
 	} else if flags.ShardCount <= 0 {
 		log.Fatalln("You cannot have less than 1 shard.")
 	}
-
-	log.Println(flags.ShardCount)
 }
 
 func main() {
@@ -74,24 +74,40 @@ func main() {
 		err error
 	)
 
-	discord, err := discordgo.New("Bot " + flags.Token)
+	// Connect to the redis cluster and send a ping to ensure success.
+	log.Println("Connecting to redis cluster:", flags.Redis)
+	rcli = redis.NewClient(&redis.Options{
+		Addr:     flags.Redis,
+		DB:       0,
+		Password: flags.RedisPassword,
+	})
+	_, err = rcli.Ping().Result()
+	if err != nil {
+		log.Fatalln("Failed to connect to redis:", err)
+	}
+
+	discord, err = discordgo.New("Bot " + flags.Token)
 	if err != nil {
 		log.Fatalln(err)
 	}
+	discord.ShardCount = flags.ShardCount
+	discord.ShardID = flags.ShardID
+	discord.AddHandler(ready)
 	discord.AddHandler(messageCreate)
 
+	// Open a websocket with Discord to start receiving messages.
 	err = discord.Open()
 	if err != nil {
-		log.Fatalln("Unable to open connection with Discord", err)
+		log.Fatalln("Unable to open connection with Discord:", err)
 	}
+	defer discord.Close()
 
-	// Setup a channel to wait for a termination signal from the os. Once a
-	// signal is received connections are cleaned up.
+	// Setup a channel to wait for a termination signal from the OS. Once a
+	// signal is received connections are cleaned up and we exit.
 	log.Println("Cho is now running, send SIGTERM to close gracefully.")
 	signalChannel := make(chan os.Signal, 1)
 	signal.Notify(signalChannel, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
 	<-signalChannel
 
 	log.Println("Cho is shutting down...")
-	discord.Close()
 }
