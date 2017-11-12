@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/go-redis/redis"
 )
 
 // CommandWord is a string used to interact with Cho.
@@ -85,7 +86,9 @@ func freeMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 	gs, err := LoadGameState(rcli, channel.GuildID, "")
-	if err != nil {
+	if err == redis.Nil {
+		return
+	} else if err != nil {
 		s.ChannelMessageSend(m.ChannelID, SorryMessage)
 		log.Println("Unable to load GameState:", err)
 		return
@@ -153,6 +156,7 @@ func startGame(s *discordgo.Session, m *discordgo.MessageCreate, triviaChannelID
 		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("A game is already in progress in <#%s>, come join in on the fun!", triviaChannelID))
 	} else {
 		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("I started a game in <#%s>. I promise not to go easy.", triviaChannelID))
+		askQuestion(s, gs)
 	}
 
 	gs.Started = true
