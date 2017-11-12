@@ -26,6 +26,12 @@
   version = "v1.2.0"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/texttheater/golang-levenshtein"
+  packages = ["levenshtein"]
+  revision = "1a14278c506abae7c17b3cb0b84ae863c7300454"
+
+[[projects]]
   name = "github.com/vmihailenco/msgpack"
   packages = [".","codes"]
   revision = "df5e5d20905d833657b92cafe6f6341ca1378083"
@@ -52,6 +58,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "b346aa06322492462e87401828e81d3cfa281a364950c4fe21345d45f7c3897a"
+  inputs-digest = "b81d6a93561f6397a6269931e6a70849749233411074e1460e23912ad93e6911"
   solver-name = "gps-cdcl"
   solver-version = 1

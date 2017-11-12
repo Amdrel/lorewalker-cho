@@ -1,16 +1,16 @@
 // Discord bot that does World of Warcraft trivia.
 // Copyright (C) 2017  Walter Kuppens
-
+//
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-
+//
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-
+//
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
@@ -107,8 +107,13 @@ func freeMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
-	if !gs.Finished {
-		s.ChannelMessageSend(m.ChannelID, "I don't really know what you mean, but you get a point anyway.")
+	// Where the magic happens, the answer is checked with Levenshtein Distance.
+	if !gs.Finished && gs.CheckAnswer(m.Content) {
+		if len(gs.Answers) > 0 {
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Correct <@!%s>, the answer was \"%s\"", m.Author.ID, gs.Answers[0]))
+		} else {
+			s.ChannelMessageSend(m.ChannelID, "Correct.")
+		}
 
 		gs.UserScores[m.Author.ID]++
 		gs.RemainingQuestions--

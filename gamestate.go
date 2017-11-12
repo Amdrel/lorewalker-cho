@@ -1,16 +1,16 @@
 // Discord bot that does World of Warcraft trivia.
 // Copyright (C) 2017  Walter Kuppens
-
+//
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-
+//
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-
+//
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
@@ -19,7 +19,10 @@ package main
 import (
 	"fmt"
 	"math/rand"
+	"strings"
 	"time"
+
+	"github.com/texttheater/golang-levenshtein/levenshtein"
 
 	"github.com/go-redis/redis"
 	"github.com/vmihailenco/msgpack"
@@ -63,6 +66,11 @@ const gameStateNamespace = "chotrivia.games"
 
 // gameStateLifetime is the amount of time a GameState object will persist.
 const gameStateLifetime = 86400 * time.Second
+
+// minLevenshteinRatio is the maximum distance of a user-provided answer
+// that's allowed. This allows us to account for minor mispellings to prevent
+// frustration (aka the entire reason I made this bot).
+const minLevenshteinRatio float64 = 0.7
 
 // questions is the default set of questions and answers Cho asks.
 var questions = []Question{
@@ -159,6 +167,21 @@ func (gs *GameState) ChooseRandomQuestion() {
 	gs.Answers = question.Answers
 }
 
+// CheckAnswer checks a user-provided answer using Levenshtein Distance.
+func (gs *GameState) CheckAnswer(answer string) bool {
+	var bestRatio float64
+	for _, correctAnswer := range gs.Answers {
+		ratio := levenshtein.RatioForStrings(
+			[]rune(strings.ToLower(correctAnswer)),
+			[]rune(strings.ToLower(answer)),
+			levenshtein.DefaultOptions)
+		if bestRatio < ratio {
+			bestRatio = ratio
+		}
+	}
+	return bestRatio >= minLevenshteinRatio
+}
+
 // CreateGameState initializes a GameState struct with default values.
 func CreateGameState(guildID string, channelID string) *GameState {
 	gs := &GameState{
@@ -167,7 +190,7 @@ func CreateGameState(guildID string, channelID string) *GameState {
 		Question:           "Which mod doesn't give me questions to ask?",
 		Answers:            []string{},
 		LastQuestionIndex:  -1,
-		RemainingQuestions: 3,
+		RemainingQuestions: 20,
 		Started:            false,
 		Finished:           false,
 		Waiting:            false,
