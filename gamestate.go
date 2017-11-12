@@ -40,7 +40,6 @@ const GameStateLifetime = 86400 * time.Second
 type GameState struct {
 	Revision           int
 	StartTime          time.Time
-	NextQuestionTime   time.Time
 	Question           string
 	Answers            []string
 	RemainingQuestions int
@@ -51,6 +50,7 @@ type GameState struct {
 	UserScores         map[string]int
 }
 
+// Winner is a Discord user id with an associated score.
 type Winner struct {
 	UserID string
 	Score  int
