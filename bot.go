@@ -200,35 +200,45 @@ func askQuestion(s *discordgo.Session, gs *GameState) {
 	}
 
 	go func(gs GameState) {
-		var (
-			err error
-		)
 		time.Sleep(questionTimeout)
+		checkIfQuestionAnswered(s, &gs)
+	}(*gs)
+}
 
-		currentGameState, err := LoadGameState(rcli, gs.GuildID, "")
-		if err != nil {
-			log.Println("Unable to load GameState:", err)
+// checkIfQuestionAnswered will check if the current game state has the same
+// number of remaining questions as the one passed in. If that's the case that
+// means the question wasn't answered successfully and the answers should be
+// provided by Cho.
+//
+// After the answer is provided another question is asked.
+func checkIfQuestionAnswered(s *discordgo.Session, gs *GameState) {
+	var (
+		err error
+	)
+
+	currentGameState, err := LoadGameState(rcli, gs.GuildID, "")
+	if err != nil {
+		log.Println("Unable to load GameState:", err)
+		return
+	}
+
+	if currentGameState.RemainingQuestions == gs.RemainingQuestions {
+		if len(gs.Answers) > 0 {
+			s.ChannelMessageSend(gs.ChannelID, fmt.Sprintf("The correct answer was \"%s\".", gs.Answers[0]))
+		} else {
+			s.ChannelMessageSend(gs.ChannelID, "Trick question, there was no answer.")
+		}
+
+		gs.RemainingQuestions--
+		gs.Waiting = false
+		if err = gs.Save(rcli); err != nil {
+			log.Println(err)
 			return
 		}
 
-		if currentGameState.RemainingQuestions == gs.RemainingQuestions {
-			if len(gs.Answers) > 0 {
-				s.ChannelMessageSend(gs.ChannelID, fmt.Sprintf("The correct answer was \"%s\".", gs.Answers[0]))
-			} else {
-				s.ChannelMessageSend(gs.ChannelID, "Trick question, there was no answer.")
-			}
-
-			gs.RemainingQuestions--
-			gs.Waiting = false
-			if err = gs.Save(rcli); err != nil {
-				log.Println(err)
-				return
-			}
-
-			time.Sleep(answerTimeout)
-			checkFinishCondition(s, &gs)
-		}
-	}(*gs)
+		time.Sleep(answerTimeout)
+		checkFinishCondition(s, gs)
+	}
 }
 
 // finishGame determines who the winners are and sets the GameState to finished.

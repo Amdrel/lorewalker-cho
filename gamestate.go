@@ -18,7 +18,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"math/rand"
 	"time"
 
@@ -110,7 +109,6 @@ func (gs *GameState) Save(rcli *redis.Client) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("Wrote GameState to '%s'", key)
 
 	return nil
 }
