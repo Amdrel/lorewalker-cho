@@ -38,14 +38,22 @@ const GameStateLifetime = 86400 * time.Second
 
 // GameState represents a game context taking place in a server.
 type GameState struct {
-	Revision         int
-	StartTime        time.Time
-	NextQuestionTime time.Time
-	Started          bool
-	Finished         bool
-	GuildID          string
-	ChannelID        string
-	UserScores       map[string]int
+	Revision           int
+	StartTime          time.Time
+	NextQuestionTime   time.Time
+	Question           string
+	Answers            []string
+	RemainingQuestions int
+	Started            bool
+	Finished           bool
+	GuildID            string
+	ChannelID          string
+	UserScores         map[string]int
+}
+
+type Winner struct {
+	UserID string
+	Score  int
 }
 
 // Save serializes a GameState struct using msgpack and stores it in the redis
@@ -60,7 +68,7 @@ func (gs *GameState) Save(rcli *redis.Client) error {
 		return err
 	}
 
-	key := BuildGameStateKey(gs.GuildID, gs.ChannelID)
+	key := BuildGameStateKey(gs.GuildID)
 	err = rcli.Set(key, data, GameStateLifetime).Err()
 	if err != nil {
 		return err
@@ -70,16 +78,49 @@ func (gs *GameState) Save(rcli *redis.Client) error {
 	return nil
 }
 
+// GetWinners returns a list of users with the highest score. A list is returned
+// as multiple users can tie for a high score.
+func (gs *GameState) GetWinners() []Winner {
+	// Find out what the highest score is.
+	highestScore := 0
+	for _, v := range gs.UserScores {
+		if v > highestScore {
+			highestScore = v
+		}
+	}
+
+	// There are no winners if no one tries :\
+	if highestScore <= 0 {
+		return []Winner{}
+	}
+
+	// Find users with the highest score, more than 1 means a tie.
+	winners := []Winner{}
+	for k, v := range gs.UserScores {
+		if v == highestScore {
+			winners = append(winners, Winner{
+				UserID: k,
+				Score:  v,
+			})
+		}
+	}
+
+	return winners
+}
+
 // CreateGameState initializes a GameState struct with default values.
 func CreateGameState(guildID string, channelID string) *GameState {
 	return &GameState{
-		Revision:   GameStateRevision,
-		StartTime:  time.Now().UTC(),
-		Started:    false,
-		Finished:   false,
-		GuildID:    guildID,
-		ChannelID:  channelID,
-		UserScores: make(map[string]int),
+		Revision:           GameStateRevision,
+		StartTime:          time.Now().UTC(),
+		Question:           "What color are my underpants?",
+		Answers:            []string{"blu"},
+		RemainingQuestions: 3,
+		Started:            false,
+		Finished:           false,
+		GuildID:            guildID,
+		ChannelID:          channelID,
+		UserScores:         make(map[string]int),
 	}
 }
 
@@ -90,9 +131,9 @@ func LoadGameState(rcli *redis.Client, guildID string, channelID string) (*GameS
 		err error
 	)
 
-	key := BuildGameStateKey(guildID, channelID)
+	key := BuildGameStateKey(guildID)
 	data, err := rcli.Get(key).Bytes()
-	if err == redis.Nil {
+	if err == redis.Nil && len(channelID) > 0 {
 		return CreateGameState(guildID, channelID), nil
 	} else if err != nil {
 		return nil, err
@@ -108,6 +149,6 @@ func LoadGameState(rcli *redis.Client, guildID string, channelID string) (*GameS
 }
 
 // BuildGameStateKey returns a key to a specific GameState stored in redis.
-func BuildGameStateKey(guildID string, channelID string) string {
-	return fmt.Sprintf("%s.%s.%s", GameStateNamespace, guildID, channelID)
+func BuildGameStateKey(guildID string) string {
+	return fmt.Sprintf("%s.%s", GameStateNamespace, guildID)
 }
