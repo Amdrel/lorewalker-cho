@@ -19,22 +19,12 @@ package main
 import (
 	"fmt"
 	"log"
+	"math/rand"
 	"time"
 
 	"github.com/go-redis/redis"
 	"github.com/vmihailenco/msgpack"
 )
-
-// GameStateRevision is the current version of the GameState struct. If this
-// structure changes we need a way to detect old versions of the structure so we
-// can convert them to the newer version.
-const GameStateRevision = 1
-
-// GameStateNamespace is prepended to keys relating to active games.
-const GameStateNamespace = "chotrivia.games"
-
-// GameStateLifetime is the amount of time a GameState object will persist.
-const GameStateLifetime = 86400 * time.Second
 
 // GameState represents a game context taking place in a server.
 type GameState struct {
@@ -43,6 +33,7 @@ type GameState struct {
 	Question           string
 	Answers            []string
 	RemainingQuestions int
+	LastQuestionIndex  int
 	Started            bool
 	Finished           bool
 	Waiting            bool
@@ -55,6 +46,51 @@ type GameState struct {
 type Winner struct {
 	UserID string
 	Score  int
+}
+
+// Question represents a question and valid answers associated with it.
+type Question struct {
+	QuestionText string
+	Answers      []string
+}
+
+// gameStateRevision is the current version of the GameState struct. If this
+// structure changes we need a way to detect old versions of the structure so we
+// can convert them to the newer version.
+const gameStateRevision = 1
+
+// gameStateNamespace is prepended to keys relating to active games.
+const gameStateNamespace = "chotrivia.games"
+
+// gameStateLifetime is the amount of time a GameState object will persist.
+const gameStateLifetime = 86400 * time.Second
+
+// questions is the default set of questions and answers Cho asks.
+var questions = []Question{
+	Question{
+		QuestionText: "In which expansion was Thousand Needles flooded?",
+		Answers:      []string{"Cataclysm", "Cata"},
+	},
+	Question{
+		QuestionText: "Which swamp was turned into a wasteland over time?",
+		Answers:      []string{"Black Morass", "Morass"},
+	},
+	Question{
+		QuestionText: "Who became the Lich King after the downfall of Arthas?",
+		Answers:      []string{"Bolvar Fordragon", "Bolvar", "Fordragon"},
+	},
+	Question{
+		QuestionText: "Who was Medivh's apprentice?",
+		Answers:      []string{"Khadgar"},
+	},
+	Question{
+		QuestionText: "Who possessed Medivh before his untimely death?",
+		Answers:      []string{"Sargeras"},
+	},
+	Question{
+		QuestionText: "What were Gilean druids originally referred as?",
+		Answers:      []string{"Harvest Witches", "Harvest-Witches", "Harvest Witch", "Harvest Witch"},
+	},
 }
 
 // Save serializes a GameState struct using msgpack and stores it in the redis
@@ -70,7 +106,7 @@ func (gs *GameState) Save(rcli *redis.Client) error {
 	}
 
 	key := BuildGameStateKey(gs.GuildID)
-	err = rcli.Set(key, data, GameStateLifetime).Err()
+	err = rcli.Set(key, data, gameStateLifetime).Err()
 	if err != nil {
 		return err
 	}
@@ -109,13 +145,30 @@ func (gs *GameState) GetWinners() []Winner {
 	return winners
 }
 
+// ChooseRandomQuestion returns a random question from the questions list.
+func (gs *GameState) ChooseRandomQuestion() {
+	index := rand.Intn(len(questions))
+	if index == gs.LastQuestionIndex {
+		index++
+	}
+	if index >= len(questions) {
+		index = 0
+	}
+
+	question := questions[index]
+	gs.LastQuestionIndex = index
+	gs.Question = question.QuestionText
+	gs.Answers = question.Answers
+}
+
 // CreateGameState initializes a GameState struct with default values.
 func CreateGameState(guildID string, channelID string) *GameState {
-	return &GameState{
-		Revision:           GameStateRevision,
+	gs := &GameState{
+		Revision:           gameStateRevision,
 		StartTime:          time.Now().UTC(),
 		Question:           "Which mod doesn't give me questions to ask?",
 		Answers:            []string{},
+		LastQuestionIndex:  -1,
 		RemainingQuestions: 3,
 		Started:            false,
 		Finished:           false,
@@ -124,6 +177,8 @@ func CreateGameState(guildID string, channelID string) *GameState {
 		ChannelID:          channelID,
 		UserScores:         make(map[string]int),
 	}
+	gs.ChooseRandomQuestion()
+	return gs
 }
 
 // LoadGameState queries for a GameState struct in redis and deserializes it. If
@@ -152,5 +207,5 @@ func LoadGameState(rcli *redis.Client, guildID string, channelID string) (*GameS
 
 // BuildGameStateKey returns a key to a specific GameState stored in redis.
 func BuildGameStateKey(guildID string) string {
-	return fmt.Sprintf("%s.%s", GameStateNamespace, guildID)
+	return fmt.Sprintf("%s.%s", gameStateNamespace, guildID)
 }

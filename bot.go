@@ -190,7 +190,9 @@ func startGame(s *discordgo.Session, m *discordgo.MessageCreate, triviaChannelID
 // A question is deemed unanswered if the number of remaining questions does not
 // change in the time before the timer starting and ending.
 func askQuestion(s *discordgo.Session, gs *GameState) {
+	gs.ChooseRandomQuestion()
 	s.ChannelMessageSend(gs.ChannelID, gs.Question)
+
 	gs.Waiting = true
 	if err := gs.Save(rcli); err != nil {
 		log.Println(err)

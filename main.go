@@ -19,9 +19,11 @@ package main
 import (
 	"flag"
 	"log"
+	"math/rand"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/go-redis/redis"
@@ -42,6 +44,8 @@ var (
 )
 
 func init() {
+	rand.Seed(time.Now().Unix()) // Initialize global PRNG.
+
 	flag.StringVar(&flags.Token, "t", "", "Bot Token")
 	flag.StringVar(&flags.Redis, "r", "", "Redis Connection String")
 	flag.StringVar(&flags.RedisPassword, "p", "", "Optional Redis Password")
