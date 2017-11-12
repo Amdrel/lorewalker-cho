@@ -45,6 +45,7 @@ type GameState struct {
 	RemainingQuestions int
 	Started            bool
 	Finished           bool
+	Waiting            bool
 	GuildID            string
 	ChannelID          string
 	UserScores         map[string]int
@@ -113,11 +114,12 @@ func CreateGameState(guildID string, channelID string) *GameState {
 	return &GameState{
 		Revision:           GameStateRevision,
 		StartTime:          time.Now().UTC(),
-		Question:           "What color are my underpants?",
-		Answers:            []string{"blu"},
+		Question:           "Which mod doesn't give me questions to ask?",
+		Answers:            []string{},
 		RemainingQuestions: 3,
 		Started:            false,
 		Finished:           false,
+		Waiting:            false,
 		GuildID:            guildID,
 		ChannelID:          channelID,
 		UserScores:         make(map[string]int),

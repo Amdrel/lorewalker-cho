@@ -101,24 +101,26 @@ func freeMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
-	// Ignore chat messages from channels other than the current trivia channel.
-	if m.ChannelID != gs.ChannelID {
+	// Ignore chat messages from channels other than the current trivia channel
+	// and ignore chat when the bot is waiting after answering a question.
+	if m.ChannelID != gs.ChannelID || !gs.Waiting {
 		return
 	}
 
 	if !gs.Finished {
 		s.ChannelMessageSend(m.ChannelID, "I don't really know what you mean, but you get a point anyway.")
+
 		gs.UserScores[m.Author.ID]++
 		gs.RemainingQuestions--
-		time.Sleep(answerTimeout)
-
-		checkFinishCondition(s, gs)
-
+		gs.Waiting = false
 		if err = gs.Save(rcli); err != nil {
 			s.ChannelMessageSend(m.ChannelID, sorryMessage)
 			log.Println("Unable to save GameState:", err)
 			return
 		}
+
+		time.Sleep(answerTimeout)
+		checkFinishCondition(s, gs)
 	}
 }
 
@@ -189,8 +191,16 @@ func startGame(s *discordgo.Session, m *discordgo.MessageCreate, triviaChannelID
 // change in the time before the timer starting and ending.
 func askQuestion(s *discordgo.Session, gs *GameState) {
 	s.ChannelMessageSend(gs.ChannelID, gs.Question)
+	gs.Waiting = true
+	if err := gs.Save(rcli); err != nil {
+		log.Println(err)
+		return
+	}
 
 	go func(gs GameState) {
+		var (
+			err error
+		)
 		time.Sleep(questionTimeout)
 
 		currentGameState, err := LoadGameState(rcli, gs.GuildID, "")
@@ -200,8 +210,14 @@ func askQuestion(s *discordgo.Session, gs *GameState) {
 		}
 
 		if currentGameState.RemainingQuestions == gs.RemainingQuestions {
-			s.ChannelMessageSend(gs.ChannelID, "The correct answer was whatevs.")
+			if len(gs.Answers) > 0 {
+				s.ChannelMessageSend(gs.ChannelID, fmt.Sprintf("The correct answer was \"%s\".", gs.Answers[0]))
+			} else {
+				s.ChannelMessageSend(gs.ChannelID, "Trick question, there was no answer.")
+			}
+
 			gs.RemainingQuestions--
+			gs.Waiting = false
 			if err = gs.Save(rcli); err != nil {
 				log.Println(err)
 				return
@@ -217,7 +233,16 @@ func askQuestion(s *discordgo.Session, gs *GameState) {
 // A nice winners list is sent to chat with user nicks and scores listed in a
 // bullet list.
 func finishGame(s *discordgo.Session, gs *GameState) {
+	var (
+		err error
+	)
+
 	gs.Finished = true
+	gs.Waiting = false
+	if err = gs.Save(rcli); err != nil {
+		log.Println(err)
+		return
+	}
 
 	winners := gs.GetWinners()
 	if len(winners) > 0 {
