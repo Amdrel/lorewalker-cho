@@ -21,7 +21,6 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 
 	"github.com/bwmarrin/discordgo"
@@ -43,27 +42,19 @@ var (
 )
 
 func init() {
-	var (
-		ShardID    string
-		ShardCount string
-		err        error
-	)
-
 	flag.StringVar(&flags.Token, "t", "", "Bot Token")
 	flag.StringVar(&flags.Redis, "r", "", "Redis Connection String")
 	flag.StringVar(&flags.RedisPassword, "p", "", "Optional Redis Password")
-	flag.StringVar(&ShardID, "s", "0", "Shard ID")
-	flag.StringVar(&ShardCount, "c", "1", "Number of shards")
+	flag.IntVar(&flags.ShardID, "s", 0, "Shard ID")
+	flag.IntVar(&flags.ShardCount, "c", 1, "Number of shards")
 	flag.Parse()
 
 	if len(flags.Token) == 0 {
 		log.Fatalln("A token must be provided to start Cho.")
 	} else if len(flags.Redis) == 0 {
 		log.Fatalln("A redis connection string must be provided.")
-	} else if flags.ShardID, err = strconv.Atoi(ShardID); err != nil {
-		log.Fatalln("Invalid shard id passed.")
-	} else if flags.ShardCount, err = strconv.Atoi(ShardCount); err != nil {
-		log.Fatalln("Invalid shard count passed.")
+	} else if (flags.ShardID) < 0 {
+		log.Fatalln("A shard id can't be negative.")
 	} else if flags.ShardCount <= 0 {
 		log.Fatalln("You cannot have less than 1 shard.")
 	}

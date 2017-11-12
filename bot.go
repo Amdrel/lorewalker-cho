@@ -29,7 +29,7 @@ import (
 const CommandWord = "!cho"
 
 // BotStatus is a hard-coded status shown when the bot is online.
-const BotStatus = "chotrivia.com"
+const BotStatus = "Trivia with the boys"
 
 // SorryMessage is sent to the Discord channel when a problem arises.
 const SorryMessage = "Sorry, I'm having trouble fulfilling your request right now, please try again later."
@@ -55,25 +55,25 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 }
 
 // commandMessage is dispatched when a message's contents is deemed a command
-// (starts with !cho).
+// (starts with !cho). The argument splitter is somewhat stupid right now and
+// counts double-spaces as individual arguments.
 func commandMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 	args := strings.Split(m.Content, " ")
 	if len(args) == 3 && args[1] == "start" {
-		// Ensure the channel being referenced is an actual channel reference.
-		if !(strings.HasPrefix(args[2], "<#") && strings.HasSuffix(args[2], ">")) {
-			s.ChannelMessageSend(m.ChannelID, "That's not a valid channel.")
-			return
-		}
-
-		// Start a game in the channel specified by the user.
-		channelID := args[2]
-		channelID = strings.TrimPrefix(channelID, "<#")
-		channelID = strings.TrimSuffix(channelID, ">")
-		startGame(s, m, channelID)
+		startCommand(s, m, args[2])
 	} else {
 		s.ChannelMessageSend(m.ChannelID, "I'm afraid I don't know what you're talking about.")
 		return
 	}
+}
+
+// startCommand starts a new game in the user provided channel.
+func startCommand(s *discordgo.Session, m *discordgo.MessageCreate, channelID string) {
+	if !(strings.HasPrefix(channelID, "<#") && strings.HasSuffix(channelID, ">")) {
+		s.ChannelMessageSend(m.ChannelID, "That's not a valid channel.")
+		return
+	}
+	startGame(s, m, extractChannelID(channelID))
 }
 
 // freeMessage is dispatched when a message contains normal human text and isn't
@@ -87,7 +87,7 @@ func freeMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 	}
 	gs, err := LoadGameState(rcli, channel.GuildID, "")
 	if err == redis.Nil {
-		return
+		return // No game in progress if not in cache.
 	} else if err != nil {
 		s.ChannelMessageSend(m.ChannelID, SorryMessage)
 		log.Println("Unable to load GameState:", err)
@@ -118,7 +118,9 @@ func freeMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 	}
 }
 
-// startGame creates a new game context object and stores it in redis.
+// startGame creates a new game context object and stores it in redis. The user
+// who attempts to start the game will be informed that it started and the first
+// question will be asked in the trivia channel specified.
 func startGame(s *discordgo.Session, m *discordgo.MessageCreate, triviaChannelID string) {
 	var (
 		err error
@@ -166,12 +168,15 @@ func startGame(s *discordgo.Session, m *discordgo.MessageCreate, triviaChannelID
 	}
 }
 
-// askQuestion picks the next question and sends it to the trivia channel.
+// askQuestion picks the next question and sends it to the trivia channel. A
+// timer is also set to tell people the answer if no one gets it right.
 func askQuestion(s *discordgo.Session, gs *GameState) {
 	s.ChannelMessageSend(gs.ChannelID, gs.Question)
 }
 
 // finishGame determines who the winners are and sets the GameState to finished.
+// A nice winners list is sent to chat with user nicks and scores listed in a
+// bullet list.
 func finishGame(s *discordgo.Session, gs *GameState) {
 	gs.Finished = true
 
@@ -180,7 +185,7 @@ func finishGame(s *discordgo.Session, gs *GameState) {
 		msg := "Alright we're out of questions, here are your winners:\n\n"
 		for _, winner := range winners {
 			plural := ""
-			if len(winners) > 1 {
+			if winner.Score > 1 {
 				plural = "s"
 			}
 			msg += fmt.Sprintf("* <@!%s> - %d point%s\n", winner.UserID, winner.Score, plural)
@@ -190,4 +195,12 @@ func finishGame(s *discordgo.Session, gs *GameState) {
 	} else {
 		s.ChannelMessageSend(gs.ChannelID, "Well it appears no one won because no one answered a *single* question right. You people really don't know much about your world.")
 	}
+}
+
+// extractChannelID removes the discord wrapper characters from a channel id
+// that was read from user chat.
+func extractChannelID(channelID string) string {
+	channelID = strings.TrimPrefix(channelID, "<#")
+	channelID = strings.TrimSuffix(channelID, ">")
+	return channelID
 }
