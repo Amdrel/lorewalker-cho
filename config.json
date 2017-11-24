@@ -1,8 +1,48 @@
 {
   "ratio": 0.8,
-  "questionCount": 3,
+  "questionCount": 10,
 
   "questions": [
+    {
+      "questionText": "What do titans start their life as?",
+      "answers": ["World-souls", "World souls"]
+    },
+    {
+      "questionText": "Where do the orcs originate from?",
+      "answers": ["Draenor"]
+    },
+    {
+      "questionText": "By what name are blood elves known as formally?",
+      "answers": ["Sin'dorei"]
+    },
+    {
+      "questionText": "Where was Dalaran located before moving to Northrend?",
+      "answers": ["Hillsbrad Foothills", "Hillsbrad"]
+    },
+    {
+      "questionText": "Who cursed the earthen and other titanic creations with the curse of flesh?",
+      "answers": ["Yogg-Saron"]
+    },
+    {
+      "questionText": "Onyxia spied on Stormwind under the guise of who?",
+      "answers": ["Katrana Prestor", "Lady Katrana Prestor", "Lady Prestor"]
+    },
+    {
+      "questionText": "Where did Thrall's Horde shipwreck before reaching Kalimdor?",
+      "answers": ["Darkspear Islands"]
+    },
+    {
+      "questionText": "Who led the Cult of the Damned during the rise of the Scourge?",
+      "answers": ["Kel'Thuzad"]
+    },
+    {
+      "questionText": "Where was the Exodar originally located before departing? (be specific)",
+      "answers": ["Tempest Keep"]
+    },
+    {
+      "questionText": "Which dragon aspect was corrupted and started the infinite dragonflight?",
+      "answers": ["Nozdormu"]
+    },
     {
       "questionText": "In which expansion was Thousand Needles flooded?",
       "answers": ["Cataclysm"]
