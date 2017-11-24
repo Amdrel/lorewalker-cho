@@ -17,7 +17,9 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"os"
@@ -28,6 +30,13 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/go-redis/redis"
 )
+
+// ChoConfig represents the values contained in the question config file.
+type ChoConfig struct {
+	Ratio         float64    `json:"ratio"`
+	QuestionCount int        `json:"questionCount"`
+	Questions     []Question `json:"questions"`
+}
 
 var (
 	// Command-line flags are stored here after being parsed.
@@ -41,6 +50,10 @@ var (
 
 	discord *discordgo.Session
 	rcli    *redis.Client
+
+	// choConfig is the default set of questions and answers Cho asks, among
+	// other configuration values soon to come.
+	choConfig = &ChoConfig{}
 )
 
 func init() {
@@ -61,6 +74,20 @@ func init() {
 		log.Fatalln("A shard id can't be negative.")
 	} else if flags.ShardCount <= 0 {
 		log.Fatalln("You cannot have less than 1 shard.")
+	}
+
+	// Read from the questions file provided in the command-line arguments and
+	// load them into memory for use by the bot during runtime.
+	freeArgs := flag.Args()
+	if len(freeArgs) <= 0 {
+		log.Fatalln("Please specify a questions file as an argument.")
+	}
+	data, err := ioutil.ReadFile(freeArgs[0])
+	if err != nil {
+		log.Fatalln(err)
+	}
+	if err = json.Unmarshal(data, choConfig); err != nil {
+		log.Fatalln(err)
 	}
 }
 

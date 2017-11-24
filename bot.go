@@ -20,26 +20,36 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/go-redis/redis"
 )
 
-// commandWord is a string used to interact with Cho.
-const commandWord = "!cho"
+const (
+	// commandWord is a string used to interact with Cho.
+	commandWord = "!cho"
 
-// botStatus is a hard-coded status shown when the bot is online.
-const botStatus = "Trivia with the boys"
+	// botStatus is a hard-coded status shown when the bot is online.
+	botStatus = "Trivia with the boys"
 
-// sorryMessage is sent to the Discord channel when a problem arises.
-const sorryMessage = "Sorry, I'm having trouble fulfilling your request right now, please try again later."
+	// sorryMessage is sent to the Discord channel when a problem arises.
+	sorryMessage = "Sorry, I'm having trouble fulfilling your request right now, please try again later."
 
-// questionTimeout is the amount of time the bot will wait before answering.
-const questionTimeout = 10 * time.Second
+	// questionTimeout is the amount of time the bot will wait before answering.
+	questionTimeout = 15 * time.Second
 
-// answerTimeout is the amount of time to wait after a question is answered.
-const answerTimeout = 3 * time.Second
+	// answerTimeout is the amount of time to wait after a question is answered.
+	answerTimeout = 3 * time.Second
+
+	// startTimeout is the amount of time before the game starts.
+	startTimeout = 10 * time.Second
+)
+
+var (
+	gameStateMutex = &sync.Mutex{}
+)
 
 // ready is called when the initial Discord connection succeeds.
 func ready(s *discordgo.Session, event *discordgo.Ready) {
@@ -68,6 +78,8 @@ func commandMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 	args := strings.Split(m.Content, " ")
 	if len(args) == 3 && args[1] == "start" {
 		startCommand(s, m, args[2])
+	} else if len(args) == 2 && args[1] == "stop" {
+		stopCommand(s, m)
 	} else {
 		s.ChannelMessageSend(m.ChannelID, "I'm afraid I don't know what you're talking about.")
 		return
@@ -83,10 +95,42 @@ func startCommand(s *discordgo.Session, m *discordgo.MessageCreate, channelID st
 	startGame(s, m, extractChannelID(channelID))
 }
 
+// stopCommand stops the current game in the guild where the message was posted.
+func stopCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
+	gameStateMutex.Lock()
+	defer gameStateMutex.Unlock()
+
+	channel, err := discord.State.Channel(m.ChannelID)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	gs, err := LoadGameState(rcli, channel.GuildID, "")
+	if err != nil {
+		s.ChannelMessageSend(m.ChannelID, sorryMessage)
+		log.Println("Unable to load GameState:", err)
+		return
+	} else if err == redis.Nil || gs.Finished {
+		s.ChannelMessageSend(m.ChannelID, "There is no game in progress.")
+		return
+	}
+
+	gs.Finished = true
+	if err = gs.Save(rcli); err != nil {
+		s.ChannelMessageSend(m.ChannelID, sorryMessage)
+		log.Println("Unable to save GameState:", err)
+		return
+	}
+	s.ChannelMessageSend(m.ChannelID, "Oh okay... I've stopped the game per your request. Goodbye...")
+}
+
 // freeMessage is dispatched when a message contains normal human text and isn't
 // a command. This function is used to process trivia answers from users if a
 // game is currently ongoing.
 func freeMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
+	gameStateMutex.Lock()
+	defer gameStateMutex.Unlock()
+
 	channel, err := discord.State.Channel(m.ChannelID)
 	if err != nil {
 		log.Println(err)
@@ -124,8 +168,10 @@ func freeMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 			return
 		}
 
-		time.Sleep(answerTimeout)
-		checkFinishCondition(s, gs)
+		go func(gs GameState) {
+			time.Sleep(answerTimeout)
+			checkFinishCondition(s, &gs)
+		}(*gs)
 	}
 }
 
@@ -143,6 +189,9 @@ func checkFinishCondition(s *discordgo.Session, gs *GameState) {
 // who attempts to start the game will be informed that it started and the first
 // question will be asked in the trivia channel specified.
 func startGame(s *discordgo.Session, m *discordgo.MessageCreate, triviaChannelID string) {
+	gameStateMutex.Lock()
+	defer gameStateMutex.Unlock()
+
 	var (
 		err error
 	)
@@ -179,7 +228,11 @@ func startGame(s *discordgo.Session, m *discordgo.MessageCreate, triviaChannelID
 		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("A game is already in progress in <#%s>, come join in on the fun!", gs.ChannelID))
 	} else {
 		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("I started a game in <#%s>. I promise not to go easy.", gs.ChannelID))
-		checkFinishCondition(s, gs)
+
+		go func(gs GameState) {
+			time.Sleep(startTimeout)
+			checkFinishCondition(s, &gs)
+		}(*gs)
 	}
 
 	gs.Started = true
@@ -217,6 +270,9 @@ func askQuestion(s *discordgo.Session, gs *GameState) {
 //
 // After the answer is provided another question is asked.
 func checkIfQuestionAnswered(s *discordgo.Session, gs *GameState) {
+	gameStateMutex.Lock()
+	defer gameStateMutex.Unlock()
+
 	var (
 		err error
 	)
@@ -224,6 +280,9 @@ func checkIfQuestionAnswered(s *discordgo.Session, gs *GameState) {
 	currentGameState, err := LoadGameState(rcli, gs.GuildID, "")
 	if err != nil {
 		log.Println("Unable to load GameState:", err)
+		return
+	}
+	if currentGameState.Finished {
 		return
 	}
 
@@ -241,8 +300,10 @@ func checkIfQuestionAnswered(s *discordgo.Session, gs *GameState) {
 			return
 		}
 
-		time.Sleep(answerTimeout)
-		checkFinishCondition(s, gs)
+		go func(gs GameState) {
+			time.Sleep(answerTimeout)
+			checkFinishCondition(s, &gs)
+		}(*gs)
 	}
 }
 

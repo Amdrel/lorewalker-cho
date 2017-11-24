@@ -52,8 +52,8 @@ type Winner struct {
 
 // Question represents a question and valid answers associated with it.
 type Question struct {
-	QuestionText string
-	Answers      []string
+	QuestionText string   `json:"questionText"`
+	Answers      []string `json:"answers"`
 }
 
 // gameStateRevision is the current version of the GameState struct. If this
@@ -66,39 +66,6 @@ const gameStateNamespace = "chotrivia.games"
 
 // gameStateLifetime is the amount of time a GameState object will persist.
 const gameStateLifetime = 86400 * time.Second
-
-// minLevenshteinRatio is the maximum distance of a user-provided answer
-// that's allowed. This allows us to account for minor mispellings to prevent
-// frustration (aka the entire reason I made this bot).
-const minLevenshteinRatio float64 = 0.7
-
-// questions is the default set of questions and answers Cho asks.
-var questions = []Question{
-	Question{
-		QuestionText: "In which expansion was Thousand Needles flooded?",
-		Answers:      []string{"Cataclysm", "Cata"},
-	},
-	Question{
-		QuestionText: "Which swamp was turned into a wasteland over time?",
-		Answers:      []string{"Black Morass", "Morass"},
-	},
-	Question{
-		QuestionText: "Who became the Lich King after the downfall of Arthas?",
-		Answers:      []string{"Bolvar Fordragon", "Bolvar", "Fordragon"},
-	},
-	Question{
-		QuestionText: "Who was Medivh's apprentice?",
-		Answers:      []string{"Khadgar"},
-	},
-	Question{
-		QuestionText: "Who possessed Medivh before his untimely death?",
-		Answers:      []string{"Sargeras"},
-	},
-	Question{
-		QuestionText: "What were Gilean druids originally referred as?",
-		Answers:      []string{"Harvest Witches", "Harvest-Witches", "Harvest Witch", "Harvest Witch"},
-	},
-}
 
 // Save serializes a GameState struct using msgpack and stores it in the redis
 // cluster with a lifetime of a day.
@@ -153,15 +120,15 @@ func (gs *GameState) GetWinners() []Winner {
 
 // ChooseRandomQuestion returns a random question from the questions list.
 func (gs *GameState) ChooseRandomQuestion() {
-	index := rand.Intn(len(questions))
+	index := rand.Intn(len(choConfig.Questions))
 	if index == gs.LastQuestionIndex {
 		index++
 	}
-	if index >= len(questions) {
+	if index >= len(choConfig.Questions) {
 		index = 0
 	}
 
-	question := questions[index]
+	question := choConfig.Questions[index]
 	gs.LastQuestionIndex = index
 	gs.Question = question.QuestionText
 	gs.Answers = question.Answers
@@ -179,7 +146,7 @@ func (gs *GameState) CheckAnswer(answer string) bool {
 			bestRatio = ratio
 		}
 	}
-	return bestRatio >= minLevenshteinRatio
+	return bestRatio >= choConfig.Ratio
 }
 
 // CreateGameState initializes a GameState struct with default values.
@@ -190,7 +157,7 @@ func CreateGameState(guildID string, channelID string) *GameState {
 		Question:           "Which mod doesn't give me questions to ask?",
 		Answers:            []string{},
 		LastQuestionIndex:  -1,
-		RemainingQuestions: 20,
+		RemainingQuestions: choConfig.QuestionCount,
 		Started:            false,
 		Finished:           false,
 		Waiting:            false,
