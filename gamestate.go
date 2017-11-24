@@ -31,7 +31,7 @@ import (
 // GameState represents a game context taking place in a server.
 type GameState struct {
 	Revision           int
-	StartTime          time.Time
+	StartTime          int64
 	Question           string
 	Answers            []string
 	RemainingQuestions int
@@ -153,7 +153,7 @@ func (gs *GameState) CheckAnswer(answer string) bool {
 func CreateGameState(guildID string, channelID string) *GameState {
 	gs := &GameState{
 		Revision:           gameStateRevision,
-		StartTime:          time.Now().UTC(),
+		StartTime:          time.Now().UTC().Unix(),
 		Question:           "Which mod doesn't give me questions to ask?",
 		Answers:            []string{},
 		LastQuestionIndex:  -1,

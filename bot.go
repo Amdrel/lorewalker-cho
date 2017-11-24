@@ -106,7 +106,7 @@ func stopCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 	gs, err := LoadGameState(rcli, channel.GuildID, "")
-	if err != nil {
+	if err != nil && err != redis.Nil {
 		s.ChannelMessageSend(m.ChannelID, sorryMessage)
 		log.Println("Unable to load GameState:", err)
 		return
@@ -178,6 +178,21 @@ func freeMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 // checkFinishCondition will finish the game if no more questions remain,
 // otherwise it will ask another question.
 func checkFinishCondition(s *discordgo.Session, gs *GameState) {
+	gameStateMutex.Lock()
+	defer gameStateMutex.Unlock()
+
+	// Ensure the game state passed in the timer is the same one that's
+	// currently running. If the start times don't match that means this timer
+	// was not meant for the game in progress and it should be ignored.
+	currentGameState, err := LoadGameState(rcli, gs.GuildID, "")
+	if err != nil {
+		log.Println("Unable to load GameState:", err)
+		return
+	}
+	if currentGameState.Finished || currentGameState.StartTime != gs.StartTime {
+		return
+	}
+
 	if gs.RemainingQuestions <= 0 {
 		finishGame(s, gs)
 	} else {
@@ -229,16 +244,16 @@ func startGame(s *discordgo.Session, m *discordgo.MessageCreate, triviaChannelID
 	} else {
 		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("I started a game in <#%s>. I promise not to go easy.", gs.ChannelID))
 
+		gs.Started = true
+		if err = gs.Save(rcli); err != nil {
+			log.Println(err)
+			return
+		}
+
 		go func(gs GameState) {
 			time.Sleep(startTimeout)
 			checkFinishCondition(s, &gs)
 		}(*gs)
-	}
-
-	gs.Started = true
-	if err = gs.Save(rcli); err != nil {
-		log.Println(err)
-		return
 	}
 }
 
@@ -282,7 +297,7 @@ func checkIfQuestionAnswered(s *discordgo.Session, gs *GameState) {
 		log.Println("Unable to load GameState:", err)
 		return
 	}
-	if currentGameState.Finished {
+	if currentGameState.Finished || currentGameState.StartTime != gs.StartTime {
 		return
 	}
 
