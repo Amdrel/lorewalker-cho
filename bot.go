@@ -292,6 +292,9 @@ func checkIfQuestionAnswered(s *discordgo.Session, gs *GameState) {
 		err error
 	)
 
+	// Ensure the game state passed in the timer is the same one that's
+	// currently running. If the start times don't match that means this timer
+	// was not meant for the game in progress and it should be ignored.
 	currentGameState, err := LoadGameState(rcli, gs.GuildID, "")
 	if err != nil {
 		log.Println("Unable to load GameState:", err)
