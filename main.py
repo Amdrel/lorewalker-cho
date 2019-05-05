@@ -21,11 +21,11 @@ SQLALCHEMY_URL = "postgresql+psycopg2://:@/{dbname}?host={host}".format(
 DISCORD_TOKEN = os.environ["CHO_DISCORD_TOKEN"]
 SQLALCHEMY_POOL_SIZE = int(os.environ.get("SQLALCHEMY_POOL_SIZE", 6))
 
-# Setup text logging for the bot.
+# Setup text logging for the bot that will be used throughout the application.
 LOG_FORMAT = "%(asctime)-15s [%(levelname)s] %(message)s"
 logging.basicConfig(format=LOG_FORMAT)
-logger = logging.getLogger("cho")
-logger.setLevel("INFO")
+LOGGER = logging.getLogger("cho")
+LOGGER.setLevel("INFO")
 
 
 def main():
@@ -34,16 +34,16 @@ def main():
     parser = argparse.ArgumentParser(description="Start a Cho Trivia worker.")
     args = parser.parse_args()
 
-    logger.info("Starting Cho Trivia worker")
+    LOGGER.info("Starting Cho Trivia worker")
     engine = sa.create_engine(
         SQLALCHEMY_URL, pool_size=SQLALCHEMY_POOL_SIZE, max_overflow=0
     )
-    logger.info("Started connection pool with size: %d", SQLALCHEMY_POOL_SIZE)
+    LOGGER.info("Started connection pool with size: %d", SQLALCHEMY_POOL_SIZE)
 
     discord_client = ChoClient()
     discord_client.run(DISCORD_TOKEN)
 
-    logger.info("Shutting down... good bye!")
+    LOGGER.info("Shutting down... good bye!")
 
 
 if __name__ == "__main__":
