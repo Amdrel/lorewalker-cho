@@ -6,7 +6,7 @@ import random
 import uuid
 import cho
 
-from questions import DEFAULT_QUESTIONS
+from data.questions import DEFAULT_QUESTIONS
 
 CURRENT_REVISION = 0
 

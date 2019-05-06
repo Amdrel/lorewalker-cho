@@ -22,7 +22,7 @@ import jellyfish
 import sqlalchemy as sa
 
 from game_state import GameState
-from schema import guilds, active_games
+from sql.schema import guilds, active_games
 
 LOGGER = logging.getLogger("cho")
 
