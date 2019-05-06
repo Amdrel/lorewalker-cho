@@ -23,18 +23,6 @@ import sqlalchemy as sa
 from schema import guilds, active_games
 
 
-# async def game_loop(discord_client, guild_id, config):
-#     """The game loop for any particular game in progress."""
-
-#     game_state = get_game_state(discord_client.engine, guild_id)
-
-#     while not game_state.complete:
-#         await asyncio.sleep(10)
-
-#         with discord_client.engine.begin() as conn:
-#             game_state.step()
-
-
 def save_game_state(conn, guild_pk, guild_id, game_state):
     """Saves a game state to the database."""
 

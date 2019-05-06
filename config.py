@@ -33,7 +33,10 @@ def get_postgres_url():
 
 
 def setup_logging(debug=False):
-    """Setup text logging for the bot."""
+    """Setup text logging for the bot.
+
+    :param bool debug:
+    """
 
     logging.basicConfig(format="%(asctime)-15s [%(levelname)s] %(message)s")
     logger = logging.getLogger("cho")

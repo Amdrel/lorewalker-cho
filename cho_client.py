@@ -26,6 +26,10 @@ from game_state import GameState
 SHORT_WAIT_SECS = 5
 LONG_WAIT_SECS = 10
 
+CMD_START = "start"
+CMD_STOP = "stop"
+CMD_SCOREBOARD = "scoreboard"
+
 LOGGER = logging.getLogger("cho")
 
 
@@ -81,11 +85,11 @@ class ChoClient(discord.Client):
         game_in_progress = message.guild.id in self.active_games
 
         if cho.is_command(message, prefix):
-            await self.handle_command(message)
+            await self._handle_command(message)
         elif game_in_progress and cho.is_message_from_trivia_channel(message):
-            await self.process_answer(message)
+            await self._process_answer(message)
 
-    async def handle_command(self, message):
+    async def _handle_command(self, message):
         """Called when a Cho command is received from a user.
 
         :param m message:
@@ -100,7 +104,6 @@ class ChoClient(discord.Client):
             return
 
         args = message.content.split()
-
         if len(args) < 2:
             await message.channel.send(
                 "You didn't specify a command. If you want to "
@@ -108,22 +111,28 @@ class ChoClient(discord.Client):
             )
             return
 
-        if args[1].lower() == "start":
-            await self.handle_start_command(message)
+        command = args[1].lower()
+
+        if command == CMD_START:
+            await self._handle_start_command(message)
+        elif command == CMD_STOP:
+            await self._handle_stop_command(message)
+        elif command == CMD_SCOREBOARD:
+            await self._handle_scoreboard_command(message)
         else:
             await message.channel.send(
                 "I'm afraid I don't know that command. If you want to "
                 "start a game use the \"start\" command."
             )
 
-    async def handle_start_command(self, message):
-        """Executes the start command for Cho.
+    async def _handle_start_command(self, message):
+        """Starts a new game at the request of a user.
 
         :param m message:
         :type m: discord.message.Message
         """
 
-        if message.guild.id in self.active_games:
+        if self._is_game_in_progress(message.guild.id):
             await message.channel.send(
                 "A game is already active in the trivia channel. If you "
                 "want to participate please go in there."
@@ -137,9 +146,47 @@ class ChoClient(discord.Client):
         await message.channel.send(
             "Okay I'm starting a game. Don't expect me to go easy."
         )
-        await self.start_game(message.guild, message.channel)
+        await self._start_game(message.guild, message.channel)
 
-    async def start_game(self, guild, channel):
+    async def _handle_stop_command(self, message):
+        """Stops the current game at the request of the user.
+
+        :param m message:
+        :type m: discord.message.Message
+        """
+
+        guild_id = message.guild.id
+
+        if self._is_game_in_progress(guild_id):
+            LOGGER.info(
+                "Stopping game in guild %s, requested by %s",
+                guild_id, message.author
+            )
+            self._cleanup_game(guild_id)
+
+            await message.channel.send(
+                "I'm stopping the game for now. Maybe we can play another time?"
+            )
+        else:
+            await message.channel.send(
+                "There's no game to stop right now. If you're interested in "
+                "stopping games before they end, I recommend that you start "
+                "one first."
+            )
+
+    async def _handle_scoreboard_command(self, message):
+        """Displays a scoreboard at the request of the user.
+
+        :param m message:
+        :type m: discord.message.Message
+        """
+
+        await message.channel.send(
+            "Sorry, I currently don't track scores between games; however I "
+            "do plan on doing this soon! Ask me again later."
+        )
+
+    async def _start_game(self, guild, channel):
         """Starts a new trivia game.
 
         :param g guild:
@@ -148,37 +195,36 @@ class ChoClient(discord.Client):
         :type c: discord.channel.Channel
         """
 
-        new_game = GameState()
-        self.active_games[guild.id] = new_game
+        new_game = self._create_game(guild.id)
 
         await asyncio.sleep(SHORT_WAIT_SECS)
-        await self.ask_question(channel, new_game)
+        await self._ask_question(channel, new_game)
 
-    async def process_answer(self, message):
+    async def _process_answer(self, message):
         """Called when an answer is received from a user.
 
         :param m message:
         :type m: discord.message.Message
         """
 
-        active_game = self.active_games[message.guild.id]
+        game_state = self._get_game(message.guild.id)
 
         # Don't process the answer if the bot is currently in-between asking
         # questions. Without this multiple people can get the answer right
         # rather than just the first person.
-        if not active_game.waiting:
+        if not game_state.waiting:
             LOGGER.debug("Ignoring answer: %s", message.content)
             return
 
-        if active_game.check_answer(message.content):
+        if game_state.check_answer(message.content):
             LOGGER.debug("Correct answer received: %s", message.content)
 
             user_id = message.author.id
-            question = active_game.get_question()
+            question = game_state.get_question()
 
-            active_game.waiting = False
-            active_game.bump_score(user_id)
-            active_game.step()
+            game_state.waiting = False
+            game_state.bump_score(user_id)
+            game_state.step()
 
             await message.channel.send(
                 "Correct, <@!{user_id}>! The answer is \"{answer}\".".format(
@@ -187,34 +233,49 @@ class ChoClient(discord.Client):
                 ),
             )
             await asyncio.sleep(SHORT_WAIT_SECS)
-            await self.ask_question(message.channel, active_game)
+            await self._ask_question(message.channel, game_state)
         else:
             LOGGER.debug("Incorrect answer received: %s", message.content)
 
-    async def ask_question(self, channel, active_game):
+    async def _ask_question(self, channel, game_state):
         """Asks a trivia question in a Discord channel.
 
         :param c channel:
-        :param GameState active_game:
+        :param GameState game_state:
         :type c: discord.channel.Channel
         """
 
-        if active_game.complete:
-            await self.finish_game(channel, active_game)
+        guild_id = channel.guild.id
+
+        # This prevents questions from being asked after a game was ended
+        # through the stop command before it ended naturally.
+        #
+        # This check also covers the rare edge-case where a game is stopped and
+        # started again within the 10 second window between questions so that
+        # the trivia game doesn't duplicate itself.
+        if not self._is_same_game_in_progress(guild_id, game_state):
             return
 
-        question = active_game.get_question()
-        last_correct_answers_total = active_game.correct_answers_total
+        if game_state.complete:
+            await self._finish_game(channel, game_state)
+            return
 
-        active_game.waiting = True
+        question = game_state.get_question()
+        last_correct_answers_total = game_state.correct_answers_total
+
+        game_state.waiting = True
         await channel.send(question["text"])
         await asyncio.sleep(LONG_WAIT_SECS)
 
+        # Check again as it can happen here too.
+        if not self._is_same_game_in_progress(guild_id, game_state):
+            return
+
         # If the correct answer total was not incrememnted, that means that no
         # one answered the question correctly. Give them the answer if so.
-        if last_correct_answers_total == active_game.correct_answers_total:
-            active_game.waiting = False
-            active_game.step()
+        if last_correct_answers_total == game_state.correct_answers_total:
+            game_state.waiting = False
+            game_state.step()
 
             await channel.send(
                 "The correct answer was \"{answer}\".".format(
@@ -222,40 +283,113 @@ class ChoClient(discord.Client):
                 ),
             )
             await asyncio.sleep(SHORT_WAIT_SECS)
-            await self.ask_question(channel, active_game)
+            await self._ask_question(channel, game_state)
 
-    async def finish_game(self, channel, active_game):
+    async def _finish_game(self, channel, game_state):
         """Outputs the scoreboard and announces the winner of a game.
 
         :param c channel:
-        :param GameState active_game:
+        :param GameState game_state:
         :type c: discord.channel.Channel
         """
 
-        del self.active_games[channel.guild.id]
+        self._cleanup_game(channel.guild.id)
 
-        scores = list(active_game.scores.items())
+        score_fmt = "{emoji} <@!{user_id}> - {score} point{suffix}\n"
+        scores = list(game_state.scores.items())
 
-        if len(scores) > 0:
-            scores.sort(key=lambda x: x[1])
-            scoreboard = ""
-
-            for user_id, score in scores:
-                scoreboard += "* <@!{user_id}> - {score} point{suffix}\n".format(
-                    user_id=user_id,
-                    score=score,
-                    suffix="s" if score != 0 else "",
-                )
-
-            await channel.send(
-                "Alright we're out of questions, the winner is TODO!\n\n"
-                "**Scoreboard**:\n{}"
-                "\nThank you for playing! I hope to see you again soon."
-                .format(scoreboard)
-            )
-        else:
+        # Don't bother making a scoreboard if it's going to be empty. It's
+        # better to make fun of everyone for being so bad at the game instead!
+        if len(scores) == 0:
             await channel.send(
                 "Well it appears no one won because no one answered a "
                 "*single* question right. You people really don't know much "
                 "about your own world. Come back after you learn some more."
             )
+            return
+
+        scores.sort(key=lambda x: x[1], reverse=True)
+        winner_user_id, highest_score = scores[0]
+        ties = 0
+        scoreboard = ""
+
+        for index, data in enumerate(scores):
+            user_id, score = data
+            if index > 0 and score >= highest_score:
+                ties += 1
+
+            scoreboard += score_fmt.format(
+                emoji=":white_check_mark:" if score >= highest_score else ":x:",
+                user_id=user_id,
+                score=score,
+                suffix="s" if score != 0 else "",
+            )
+
+        if ties == 0:
+            await channel.send(
+                "Alright we're out of questions, the winner is <@!{}>!\n\n"
+                "**Scoreboard**:\n{}"
+                "\nThank you for playing! I hope to see you again soon."
+                .format(winner_user_id, scoreboard)
+            )
+        else:
+            await channel.send(
+                "Alright we're out of questions, it seems to be a {}-way tie!\n\n"
+                "**Scoreboard**:\n{}"
+                "\nThank you for playing! I hope to see you again soon."
+                .format(str(ties), scoreboard)
+            )
+
+    def _cleanup_game(self, guild_id):
+        """Removes the game state of a guild from memory.
+
+        :param int guild_id:
+        """
+
+        del self.active_games[guild_id]
+
+    def _get_game(self, guild_id):
+        """Retrieves a guild's game state from memory.
+
+        :param int guild_id:
+        :rtype: GameState
+        :return:
+        """
+
+        return self.active_games[guild_id]
+
+    def _create_game(self, guild_id):
+        """Creates a new game state.
+
+        :param int guild_id:
+        :rtype: GameState
+        :return:
+        """
+
+        new_game = GameState(self.engine)
+        self.active_games[guild_id] = new_game
+        return new_game
+
+    def _is_game_in_progress(self, guild_id):
+        """Checks if a game is in progress for a guild.
+
+        :param int guild_id:
+        :rtype: bool
+        :return:
+        """
+
+        return guild_id in self.active_games
+
+    def _is_same_game_in_progress(self, guild_id, game_state):
+        """Checks if the game of the specified game state is running.
+
+        :param int guild_id:
+        :param GameState game_state:
+        :rtype: bool
+        :return:
+        """
+
+        return (
+            self._is_game_in_progress(guild_id)
+            and self._get_game(guild_id).uuid == game_state.uuid
+        )
