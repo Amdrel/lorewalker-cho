@@ -24,6 +24,8 @@ import sqlalchemy as sa
 from game_state import GameState
 from sql.schema import guilds, active_games
 
+DEFAULT_PREFIX = "!"
+
 LOGGER = logging.getLogger("cho")
 
 
@@ -112,6 +114,15 @@ def clear_game_state(conn, guild_id):
     return conn.execute(query)
 
 
+def get_prefix(config=None):
+    """Gets the prefix for the specified guild."""
+
+    if config and "prefix" in config:
+        return config["prefix"]
+    else:
+        return DEFAULT_PREFIX
+
+
 def is_command(message, prefix):
     """Checks if a Discord message is a Cho command invocation."""
 
@@ -119,6 +130,18 @@ def is_command(message, prefix):
         message.content.startswith("{}cho".format(prefix))
         or message.content.startswith("{}trivia".format(prefix))
     )
+
+
+def is_admin(member, channel):
+    """Checks if a passed in Member is an administrator.
+
+    :param m member:
+    :type m: discord.member.Member
+    :rtype: bool
+    :return:
+    """
+
+    return channel.permissions_for(member).administrator
 
 
 def is_message_from_trivia_channel(message, config):

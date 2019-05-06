@@ -31,8 +31,12 @@ CMD_START = "start"
 CMD_STOP = "stop"
 CMD_SCOREBOARD = "scoreboard"
 CMD_SET_CHANNEL = "set-channel"
+CMD_SET_PREFIX = "set-prefix"
 
 DISCORD_CHANNEL_REGEX = re.compile("^<#([0-9]*)>$")
+
+ALLOWED_PREFIXES = set(["!", "&", "?", "|", "^", "%"])
+
 
 LOGGER = logging.getLogger("cho")
 
@@ -84,10 +88,17 @@ class ChoClient(discord.Client):
             )
             return
 
-        # TODO: Get prefix from the configuration.
-        prefix = "!"
         guild_id = message.guild.id
         game_in_progress = guild_id in self.active_games
+
+        # Gets the configured prefix if there is one. If there isn't one a
+        # default that's hardcoded is used instead.
+        results = cho.get_guild(self.engine, guild_id)
+        if results:
+            _, config = results
+            prefix = cho.get_prefix(config)
+        else:
+            prefix = cho.get_prefix(None)
 
         if cho.is_command(message, prefix):
             await self._handle_command(message)
@@ -140,6 +151,8 @@ class ChoClient(discord.Client):
             await self._handle_scoreboard_command(message, args, config)
         elif command == CMD_SET_CHANNEL:
             await self._handle_set_channel(message, args, config)
+        elif command == CMD_SET_PREFIX:
+            await self._handle_set_prefix(message, args, config)
         else:
             await message.channel.send(
                 "I'm afraid I don't know that command. If you want to "
@@ -228,11 +241,7 @@ class ChoClient(discord.Client):
             )
             return
 
-        # TODO: Make this a function.
-        # requesting_user = self.fetch_user(message.author.id)
-        permissions = message.channel.permissions_for(message.author)
-
-        if not permissions.administrator:
+        if not cho.is_admin(message.author, message.channel):
             await message.channel.send(
                 "Sorry, only administrators can move me."
             )
@@ -241,7 +250,8 @@ class ChoClient(discord.Client):
         guild_id = message.guild.id
         trivia_channel_id = args[2]
         trivia_channel_re_match = DISCORD_CHANNEL_REGEX.match(
-            trivia_channel_id)
+            trivia_channel_id
+        )
 
         if not trivia_channel_re_match:
             await message.channel.send(
@@ -254,6 +264,44 @@ class ChoClient(discord.Client):
 
         await message.channel.send(
             "The trivia channel is now in {}.".format(trivia_channel_id)
+        )
+
+    async def _handle_set_prefix(self, message, args, config):
+        """Updates the prefix used for the guild.
+
+        :param m message:
+        :param list args:
+        :param dict config:
+        :type m: discord.message.Message
+        """
+
+        if len(args) < 3:
+            await message.channel.send(
+                "Please specify a prefix when using \"set-prefix\"."
+            )
+            return
+
+        if not cho.is_admin(message.author, message.channel):
+            await message.channel.send(
+                "Sorry, only administrators can change the prefix."
+            )
+            return
+
+        guild_id = message.guild.id
+        new_prefix = args[2]
+
+        if new_prefix not in ALLOWED_PREFIXES:
+            await message.channel.send(
+                "Sorry, that's not a supported prefix for me. Please try "
+                "another one."
+            )
+            return
+
+        config["prefix"] = new_prefix
+        cho.update_guild_config(self.engine, guild_id, config)
+
+        await message.channel.send(
+            "My prefix is now in \"{}\".".format(new_prefix)
         )
 
     async def _start_game(self, guild, channel):
