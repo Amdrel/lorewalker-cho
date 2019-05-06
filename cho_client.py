@@ -34,9 +34,7 @@ CMD_SET_CHANNEL = "set-channel"
 CMD_SET_PREFIX = "set-prefix"
 
 DISCORD_CHANNEL_REGEX = re.compile("^<#([0-9]*)>$")
-
 ALLOWED_PREFIXES = set(["!", "&", "?", "|", "^", "%"])
-
 
 LOGGER = logging.getLogger("cho")
 

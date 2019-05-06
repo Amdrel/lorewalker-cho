@@ -1,4 +1,4 @@
-# Cho Trivia [![License](https://img.shields.io/badge/license-GPLv3-blue.svg)](COPYING)
+# Lorewalker Cho [![License](https://img.shields.io/badge/license-GPLv3-blue.svg)](COPYING)
 
 Cho Trivia is a Discord bot that asks trivia questions related to the game
 World of Warcraft.
