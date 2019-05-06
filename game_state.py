@@ -14,13 +14,17 @@ CURRENT_REVISION = 0
 class GameState():
     """Python class representing a Cho game state."""
 
-    def __init__(self, engine, active_game_dict=None):
+    def __init__(self, engine, guild_id, active_game_dict=None):
         """Converts a game state dict into an object.
 
         :param e engine:
+        :param int guild_id:
         :param dict active_game_dict:
         :type e: sqlalchemy.engine.Engine
         """
+
+        self.engine = engine
+        self.guild_id = guild_id
 
         if active_game_dict:
             if CURRENT_REVISION != active_game_dict["revision"]:
@@ -81,6 +85,8 @@ class GameState():
 
         if self.current_question >= len(self.questions):
             self._complete_game()
+
+        cho.save_game_state(self.engine, self)
 
     def check_answer(self, answer, ratio=0.8):
         """Checks an answer for correctness.

@@ -28,16 +28,9 @@ target_metadata = None
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
 
-# TODO: Import this from the same place as the bot to de-dupe code.
-POSTGRES_CONFIG = {
-    "connection_type": os.environ["CHO_PG_CONNECTION_TYPE"],
-    "host": os.environ["CHO_PG_HOST"],
-    "database": os.environ["CHO_PG_DATABASE"],
-}
-
 # Generate a postgres connection url and monkey patch the alembic config.
 SQLALCHEMY_URL = "postgresql+psycopg2://:@/{dbname}?host={host}".format(
-    dbname=POSTGRES_CONFIG["database"], host=POSTGRES_CONFIG["host"]
+    dbname=os.environ["CHO_PG_DATABASE"], host=os.environ["CHO_PG_HOST"]
 )
 alembic_config = config.get_section(config.config_ini_section)
 alembic_config["sqlalchemy.url"] = SQLALCHEMY_URL

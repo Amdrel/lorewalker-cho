@@ -26,7 +26,7 @@ def upgrade():
     op.create_table(
         "guilds",
         sa.Column("id", sa.BigInteger, primary_key=True),
-        sa.Column("discord_guild_id", sa.Text, nullable=False),
+        sa.Column("discord_guild_id", sa.BigInteger, nullable=False),
         sa.Column("config", postgresql.JSONB(), nullable=False),
         sa.Index(
             "guilds_discord_guild_id_idx",

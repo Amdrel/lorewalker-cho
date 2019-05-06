@@ -18,6 +18,7 @@
 
 import asyncio
 import logging
+import re
 import discord
 import cho
 
@@ -29,6 +30,9 @@ LONG_WAIT_SECS = 10
 CMD_START = "start"
 CMD_STOP = "stop"
 CMD_SCOREBOARD = "scoreboard"
+CMD_SET_CHANNEL = "set-channel"
+
+DISCORD_CHANNEL_REGEX = re.compile("^<#([0-9]*)>$")
 
 LOGGER = logging.getLogger("cho")
 
@@ -82,12 +86,16 @@ class ChoClient(discord.Client):
 
         # TODO: Get prefix from the configuration.
         prefix = "!"
-        game_in_progress = message.guild.id in self.active_games
+        guild_id = message.guild.id
+        game_in_progress = guild_id in self.active_games
 
         if cho.is_command(message, prefix):
             await self._handle_command(message)
-        elif game_in_progress and cho.is_message_from_trivia_channel(message):
-            await self._process_answer(message)
+        elif game_in_progress:
+            _, config = cho.get_guild(self.engine, guild_id)
+
+            if cho.is_message_from_trivia_channel(message, config):
+                await self._process_answer(message)
 
     async def _handle_command(self, message):
         """Called when a Cho command is received from a user.
@@ -96,7 +104,18 @@ class ChoClient(discord.Client):
         :type m: discord.message.Message
         """
 
-        if not cho.is_message_from_trivia_channel(message):
+        guild_id = message.guild.id
+
+        # This is a good opportunity to make sure the guild we're getting a
+        # command from is setup properly in the database.
+        guild_query_results = cho.get_guild(self.engine, guild_id)
+        if not guild_query_results:
+            LOGGER.info("Got command from new guild: %s", guild_id)
+            cho.create_guild(self.engine, guild_id)
+
+        _, config = guild_query_results
+
+        if not cho.is_message_from_trivia_channel(message, config):
             await message.channel.send(
                 "Sorry, I can't be summoned into this channel. Please go "
                 "to the trivia channel for this server."
@@ -114,21 +133,25 @@ class ChoClient(discord.Client):
         command = args[1].lower()
 
         if command == CMD_START:
-            await self._handle_start_command(message)
+            await self._handle_start_command(message, args, config)
         elif command == CMD_STOP:
-            await self._handle_stop_command(message)
+            await self._handle_stop_command(message, args, config)
         elif command == CMD_SCOREBOARD:
-            await self._handle_scoreboard_command(message)
+            await self._handle_scoreboard_command(message, args, config)
+        elif command == CMD_SET_CHANNEL:
+            await self._handle_set_channel(message, args, config)
         else:
             await message.channel.send(
                 "I'm afraid I don't know that command. If you want to "
                 "start a game use the \"start\" command."
             )
 
-    async def _handle_start_command(self, message):
+    async def _handle_start_command(self, message, args, config):
         """Starts a new game at the request of a user.
 
         :param m message:
+        :param list args:
+        :param dict config:
         :type m: discord.message.Message
         """
 
@@ -148,10 +171,12 @@ class ChoClient(discord.Client):
         )
         await self._start_game(message.guild, message.channel)
 
-    async def _handle_stop_command(self, message):
+    async def _handle_stop_command(self, message, args, config):
         """Stops the current game at the request of the user.
 
         :param m message:
+        :param list args:
+        :param dict config:
         :type m: discord.message.Message
         """
 
@@ -174,16 +199,61 @@ class ChoClient(discord.Client):
                 "one first."
             )
 
-    async def _handle_scoreboard_command(self, message):
+    async def _handle_scoreboard_command(self, message, args, config):
         """Displays a scoreboard at the request of the user.
 
         :param m message:
+        :param list args:
+        :param dict config:
         :type m: discord.message.Message
         """
 
         await message.channel.send(
             "Sorry, I currently don't track scores between games; however I "
             "do plan on doing this soon! Ask me again later."
+        )
+
+    async def _handle_set_channel(self, message, args, config):
+        """Updates the trivia channel configuration for the guild.
+
+        :param m message:
+        :param list args:
+        :param dict config:
+        :type m: discord.message.Message
+        """
+
+        if len(args) < 3:
+            await message.channel.send(
+                "Please specify a channel when using \"set-channel\"."
+            )
+            return
+
+        # TODO: Make this a function.
+        # requesting_user = self.fetch_user(message.author.id)
+        permissions = message.channel.permissions_for(message.author)
+
+        if not permissions.administrator:
+            await message.channel.send(
+                "Sorry, only administrators can move me."
+            )
+            return
+
+        guild_id = message.guild.id
+        trivia_channel_id = args[2]
+        trivia_channel_re_match = DISCORD_CHANNEL_REGEX.match(
+            trivia_channel_id)
+
+        if not trivia_channel_re_match:
+            await message.channel.send(
+                "That doesn't look like a channel to me. Please try again."
+            )
+            return
+
+        config["trivia_channel"] = int(trivia_channel_re_match.group(1))
+        cho.update_guild_config(self.engine, guild_id, config)
+
+        await message.channel.send(
+            "The trivia channel is now in {}.".format(trivia_channel_id)
         )
 
     async def _start_game(self, guild, channel):
@@ -366,7 +436,7 @@ class ChoClient(discord.Client):
         :return:
         """
 
-        new_game = GameState(self.engine)
+        new_game = GameState(self.engine, guild_id)
         self.active_games[guild_id] = new_game
         return new_game
 

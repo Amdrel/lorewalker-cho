@@ -17,56 +17,98 @@
 """Core code that controls Cho's behavior."""
 
 import asyncio
+import logging
 import jellyfish
 import sqlalchemy as sa
 
+from game_state import GameState
 from schema import guilds, active_games
 
-
-def save_game_state(conn, guild_pk, guild_id, game_state):
-    """Saves a game state to the database."""
-
-    query = active_games.insert(None).values({
-        "guild_id": guild_id,
-        "game_state": guild_id,
-    })
-    return conn.execute(query)
+LOGGER = logging.getLogger("cho")
 
 
-def get_game_state(conn, guild_id):
-    """Retrieves an existing game state."""
-
-    query = active_games \
-        .select([guilds.c.game_state]) \
-        .where(guilds.c.guild_id == guild_id) \
-        .limit(1)
-    return conn.execute(query).first()
-
-
-def clear_game_state(conn, guild_id):
-    """Removes an existing game state from the database."""
-
-    query = active_games.delete(None).where(guilds.c.guild_id == guild_id)
-    return conn.execute(query)
-
-
-def get_guild(conn, guild_id, config):
+def get_guild(conn, guild_id):
     """Retrieves config guild information."""
 
-    query = active_games \
-        .select([guilds.c.game_state]) \
-        .where(guilds.c.guild_id == guild_id) \
+    query = sa.select([guilds.c.discord_guild_id, guilds.c.config]) \
+        .where(guilds.c.discord_guild_id == guild_id) \
         .limit(1)
     return conn.execute(query).first()
 
 
-def create_guild(conn, guild_id, config):
+def create_guild(conn, guild_id, config={}):
     """Ensures a specified Discord guild is in the database."""
 
     query = guilds.insert(None).values({
         "discord_guild_id": guild_id,
         "config": config,
     })
+    return conn.execute(query)
+
+
+def update_guild_config(conn, guild_id, config):
+    """Updates an existing guild's configuration."""
+
+    query = guilds.update(None).values({
+        "config": config,
+    }).where(guilds.c.discord_guild_id == guild_id)
+    return conn.execute(query)
+
+
+def get_game_state(conn, guild_id):
+    """Retrieves an existing game state."""
+
+    query = sa.select([guilds.c.id]) \
+        .where(guilds.c.discord_guild_id == guild_id) \
+        .limit(1)
+    guild_id_fkey = conn.execute(query).first()
+
+    query = sa.select([active_games.c.game_state]) \
+        .where(active_games.c.guild_id == guild_id_fkey[0]) \
+        .limit(1)
+    return conn.execute(query).first()
+
+
+def save_game_state(conn, game_state):
+    """Saves a game state to the database."""
+
+    query = sa.select([guilds.c.id]) \
+        .where(guilds.c.discord_guild_id == game_state.guild_id) \
+        .limit(1)
+    guild_id_fkey = conn.execute(query).first()
+
+    query = sa.select([active_games.c.id]) \
+        .where(active_games.c.guild_id == guild_id_fkey[0]) \
+        .limit(1)
+    existing_game_id = conn.execute(query).first()
+
+    if existing_game_id is not None:
+        LOGGER.debug("Updating existing game state.")
+
+        query = active_games.update(None).values({
+            "game_state": game_state.serialize(),
+        }).where(active_games.c.id == existing_game_id[0])
+        return conn.execute(query)
+    else:
+        LOGGER.debug("Creating new game state.")
+
+        query = active_games.insert(None).values({
+            "guild_id": guild_id_fkey[0],
+            "game_state": game_state.serialize(),
+        })
+        return conn.execute(query)
+
+
+def clear_game_state(conn, guild_id):
+    """Removes an existing game state from the database."""
+
+    query = sa.select([guilds.c.id]) \
+        .where(guilds.c.discord_guild_id == guild_id) \
+        .limit(1)
+    guild_id_fkey = conn.execute(query).first()
+
+    query = active_games.delete(None) \
+        .where(active_games.c.guild_id == guild_id_fkey[0])
     return conn.execute(query)
 
 
@@ -79,10 +121,13 @@ def is_command(message, prefix):
     )
 
 
-def is_message_from_trivia_channel(message):
+def is_message_from_trivia_channel(message, config):
     """Checks if the message is from the trivia channel."""
 
-    return message.channel.name == "trivia"
+    if "trivia_channel" in config:
+        return message.channel.id == config["trivia_channel"]
+    else:
+        return message.channel.name == "trivia"
 
 
 def levenshtein_ratio(source, target, ignore_case=True):
