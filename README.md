@@ -18,7 +18,18 @@ dependencies.
 A bot token is required for running Cho.
 
 ```bash
-TODO
+source ./env.sh
+./main.py
+
+# Done!
+```
+
+An example environment file:
+
+```bash
+export CHO_DISCORD_TOKEN="<your_discord_token>"
+export CHO_PG_HOST="/var/run/postgresql"
+export CHO_PG_DATABASE="cho_trivia"
 ```
 
 ## License
