@@ -59,6 +59,10 @@ class ChoClient(discord.Client):
         :type m: discord.message.Message
         """
 
+        # Ignore messages from self. Let's not risk going in a loop here.
+        if self.user.id == message.author.id:
+            return
+
         LOGGER.info("Message from \"%s\": %s", message.author, message.content)
 
         # Don't accept direct messages at this time. I might circle back later
@@ -77,9 +81,9 @@ class ChoClient(discord.Client):
         game_in_progress = message.guild.id in self.active_games
 
         if cho.is_command(message, prefix):
-            self.handle_command(message)
+            await self.handle_command(message)
         elif game_in_progress and cho.is_message_from_trivia_channel(message):
-            self.process_answer(message)
+            await self.process_answer(message)
 
     async def handle_command(self, message):
         """Called when a Cho command is received from a user.
@@ -105,7 +109,7 @@ class ChoClient(discord.Client):
             return
 
         if args[1].lower() == "start":
-            self.handle_start_command(message)
+            await self.handle_start_command(message)
         else:
             await message.channel.send(
                 "I'm afraid I don't know that command. If you want to "
@@ -131,19 +135,24 @@ class ChoClient(discord.Client):
             message.guild.id, message.author
         )
         await message.channel.send(
-            "Okay I'm starting a game. Don't expect me to go easy"
+            "Okay I'm starting a game. Don't expect me to go easy."
         )
-        self.start_game(message.channel)
+        await self.start_game(message.guild, message.channel)
 
-    async def start_game(self, channel):
+    async def start_game(self, guild, channel):
         """Starts a new trivia game.
 
+        :param g guild:
         :param c channel:
+        :type g: discord.guild.Guild
         :type c: discord.channel.Channel
         """
 
+        new_game = GameState()
+        self.active_games[guild.id] = new_game
+
         await asyncio.sleep(SHORT_WAIT_SECS)
-        self.ask_question(channel, GameState())
+        await self.ask_question(channel, new_game)
 
     async def process_answer(self, message):
         """Called when an answer is received from a user.
@@ -158,24 +167,29 @@ class ChoClient(discord.Client):
         # questions. Without this multiple people can get the answer right
         # rather than just the first person.
         if not active_game.waiting:
+            LOGGER.debug("Ignoring answer: %s", message.content)
             return
 
         if active_game.check_answer(message.content):
+            LOGGER.debug("Correct answer received: %s", message.content)
+
+            user_id = message.author.id
+            question = active_game.get_question()
+
             active_game.waiting = False
             active_game.bump_score(user_id)
             active_game.step()
 
-            user_id = message.user.id
-            question = active_game.get_question()
-
             await message.channel.send(
-                "Correct, <@{user_id}>! The answer is {answer}".format(
+                "Correct, <@!{user_id}>! The answer is \"{answer}\".".format(
                     user_id=user_id,
                     answer=question["answers"][0],
                 ),
             )
             await asyncio.sleep(SHORT_WAIT_SECS)
-            self.ask_question(message.channel, active_game)
+            await self.ask_question(message.channel, active_game)
+        else:
+            LOGGER.debug("Incorrect answer received: %s", message.content)
 
     async def ask_question(self, channel, active_game):
         """Asks a trivia question in a Discord channel.
@@ -186,7 +200,7 @@ class ChoClient(discord.Client):
         """
 
         if active_game.complete:
-            await self.finish_game(channel)
+            await self.finish_game(channel, active_game)
             return
 
         question = active_game.get_question()
@@ -203,20 +217,45 @@ class ChoClient(discord.Client):
             active_game.step()
 
             await channel.send(
-                "The correct answer was \"{answer}\"".format(
+                "The correct answer was \"{answer}\".".format(
                     answer=question["answers"][0],
                 ),
             )
             await asyncio.sleep(SHORT_WAIT_SECS)
-            self.ask_question(channel, active_game)
+            await self.ask_question(channel, active_game)
 
-    async def finish_game(self, channel):
+    async def finish_game(self, channel, active_game):
         """Outputs the scoreboard and announces the winner of a game.
 
         :param c channel:
+        :param GameState active_game:
         :type c: discord.channel.Channel
         """
 
-        await channel.send(
-            "Alright we're out of questions. The winners are:",
-        )
+        del self.active_games[channel.guild.id]
+
+        scores = list(active_game.scores.items())
+
+        if len(scores) > 0:
+            scores.sort(key=lambda x: x[1])
+            scoreboard = ""
+
+            for user_id, score in scores:
+                scoreboard += "* <@!{user_id}> - {score} point{suffix}\n".format(
+                    user_id=user_id,
+                    score=score,
+                    suffix="s" if score != 0 else "",
+                )
+
+            await channel.send(
+                "Alright we're out of questions, the winner is TODO!\n\n"
+                "**Scoreboard**:\n{}"
+                "\nThank you for playing! I hope to see you again soon."
+                .format(scoreboard)
+            )
+        else:
+            await channel.send(
+                "Well it appears no one won because no one answered a "
+                "*single* question right. You people really don't know much "
+                "about your own world. Come back after you learn some more."
+            )

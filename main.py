@@ -37,11 +37,14 @@ def main():
     """Entrypoint for Cho on the CLI."""
 
     parser = argparse.ArgumentParser(description="Start a Cho Trivia worker.")
+    parser.add_argument("--debug", action='store_true', default=False,
+                        help="Enable debug logging.")
     args = parser.parse_args()
 
-    config.setup_logging()
+    config.setup_logging(debug=args.debug)
 
-    LOGGER.info("Starting Cho Trivia worker")
+    LOGGER.info("Starting Cho Trivia worker.")
+    LOGGER.debug("Debug logging activated.")
 
     # Connect to the postgres database and setup connection pools.
     sqlalchemy_url = config.get_postgres_url()

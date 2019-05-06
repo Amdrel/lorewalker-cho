@@ -32,9 +32,13 @@ def get_postgres_url():
     )
 
 
-def setup_logging():
+def setup_logging(debug=False):
     """Setup text logging for the bot."""
 
     logging.basicConfig(format="%(asctime)-15s [%(levelname)s] %(message)s")
     logger = logging.getLogger("cho")
-    logger.setLevel("INFO")
+
+    if debug:
+        logger.setLevel("DEBUG")
+    else:
+        logger.setLevel("INFO")

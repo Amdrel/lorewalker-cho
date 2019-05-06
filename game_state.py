@@ -59,7 +59,7 @@ class GameState():
 
         self.current_question += 1
 
-        if len(self.current_question) >= len(self.questions):
+        if self.current_question >= len(self.questions):
             self.complete_game()
 
     def complete_game(self):
@@ -102,7 +102,7 @@ class GameState():
 
         return self.questions[self.current_question]
 
-    def select_questions(self, questions, count=10):
+    def select_questions(self, questions, count=3):
         """Selects a bunch of random questions for a trivia session."""
 
         cloned_questions = copy.deepcopy(questions)
