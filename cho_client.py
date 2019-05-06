@@ -16,9 +16,15 @@
 
 """Contains the Discord client class for Cho."""
 
+import asyncio
 import logging
 import discord
 import cho
+
+from game_state import GameState
+
+SHORT_WAIT_SECS = 5
+LONG_WAIT_SECS = 10
 
 LOGGER = logging.getLogger("cho")
 
@@ -38,6 +44,7 @@ class ChoClient(discord.Client):
         super().__init__()
 
         self.engine = engine
+        self.guild_configs = {}
         self.active_games = {}
 
     async def on_ready(self):
@@ -54,6 +61,9 @@ class ChoClient(discord.Client):
 
         LOGGER.info("Message from \"%s\": %s", message.author, message.content)
 
+        # Don't accept direct messages at this time. I might circle back later
+        # and add support for private trivia sessions, but it's not a priority
+        # for me right now.
         if message.guild is None:
             await message.channel.send(
                 "Oh hello there, I don't currently do private trivia "
@@ -69,10 +79,14 @@ class ChoClient(discord.Client):
         if cho.is_command(message, prefix):
             self.handle_command(message)
         elif game_in_progress and cho.is_message_from_trivia_channel(message):
-            self.handle_answer(message)
+            self.process_answer(message)
 
     async def handle_command(self, message):
-        """Called when a Cho command is received from a user."""
+        """Called when a Cho command is received from a user.
+
+        :param m message:
+        :type m: discord.message.Message
+        """
 
         if not cho.is_message_from_trivia_channel(message):
             await message.channel.send(
@@ -82,13 +96,127 @@ class ChoClient(discord.Client):
             return
 
         args = message.content.split()
-        if len(args) > 1 and args[1].lower() == "start":
-            LOGGER.info(
-                "Starting game in guild %s, requested by %s",
-                message.guild.id, message.author
+
+        if len(args) < 2:
+            await message.channel.send(
+                "You didn't specify a command. If you want to "
+                "start a game use the \"start\" command."
+            )
+            return
+
+        if args[1].lower() == "start":
+            self.handle_start_command(message)
+        else:
+            await message.channel.send(
+                "I'm afraid I don't know that command. If you want to "
+                "start a game use the \"start\" command."
             )
 
-    async def handle_answer(self, message):
-        """Called when an answer is received from a user."""
+    async def handle_start_command(self, message):
+        """Executes the start command for Cho.
 
-        pass
+        :param m message:
+        :type m: discord.message.Message
+        """
+
+        if message.guild.id in self.active_games:
+            await message.channel.send(
+                "A game is already active in the trivia channel. If you "
+                "want to participate please go in there."
+            )
+            return
+
+        LOGGER.info(
+            "Starting game in guild %s, requested by %s",
+            message.guild.id, message.author
+        )
+        await message.channel.send(
+            "Okay I'm starting a game. Don't expect me to go easy"
+        )
+        self.start_game(message.channel)
+
+    async def start_game(self, channel):
+        """Starts a new trivia game.
+
+        :param c channel:
+        :type c: discord.channel.Channel
+        """
+
+        await asyncio.sleep(SHORT_WAIT_SECS)
+        self.ask_question(channel, GameState())
+
+    async def process_answer(self, message):
+        """Called when an answer is received from a user.
+
+        :param m message:
+        :type m: discord.message.Message
+        """
+
+        active_game = self.active_games[message.guild.id]
+
+        # Don't process the answer if the bot is currently in-between asking
+        # questions. Without this multiple people can get the answer right
+        # rather than just the first person.
+        if not active_game.waiting:
+            return
+
+        if active_game.check_answer(message.content):
+            active_game.waiting = False
+            active_game.bump_score(user_id)
+            active_game.step()
+
+            user_id = message.user.id
+            question = active_game.get_question()
+
+            await message.channel.send(
+                "Correct, <@{user_id}>! The answer is {answer}".format(
+                    user_id=user_id,
+                    answer=question["answers"][0],
+                ),
+            )
+            await asyncio.sleep(SHORT_WAIT_SECS)
+            self.ask_question(message.channel, active_game)
+
+    async def ask_question(self, channel, active_game):
+        """Asks a trivia question in a Discord channel.
+
+        :param c channel:
+        :param GameState active_game:
+        :type c: discord.channel.Channel
+        """
+
+        if active_game.complete:
+            await self.finish_game(channel)
+            return
+
+        question = active_game.get_question()
+        last_correct_answers_total = active_game.correct_answers_total
+
+        active_game.waiting = True
+        await channel.send(question["text"])
+        await asyncio.sleep(LONG_WAIT_SECS)
+
+        # If the correct answer total was not incrememnted, that means that no
+        # one answered the question correctly. Give them the answer if so.
+        if last_correct_answers_total == active_game.correct_answers_total:
+            active_game.waiting = False
+            active_game.step()
+
+            await channel.send(
+                "The correct answer was \"{answer}\"".format(
+                    answer=question["answers"][0],
+                ),
+            )
+            await asyncio.sleep(SHORT_WAIT_SECS)
+            self.ask_question(channel, active_game)
+
+    async def finish_game(self, channel):
+        """Outputs the scoreboard and announces the winner of a game.
+
+        :param c channel:
+        :type c: discord.channel.Channel
+        """
+
+        await channel.send(
+            "Alright we're out of questions. The winners are:",
+        )

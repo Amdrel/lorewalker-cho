@@ -96,6 +96,7 @@ def is_message_from_trivia_channel(message):
 
     return message.channel.name == "trivia"
 
+
 def levenshtein_ratio(source, target, ignore_case=True):
     """Calculates the levenshtein ratio between two strings.
 
@@ -113,7 +114,9 @@ def levenshtein_ratio(source, target, ignore_case=True):
 
     if ignore_case:
         distance = jellyfish.levenshtein_distance(
-            source.lower(), target.lower())
+            source.lower().strip(),
+            target.lower().strip()
+        )
     else:
         distance = jellyfish.levenshtein_distance(source, target)
 
