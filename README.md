@@ -18,6 +18,12 @@ dependencies.
 A bot token is required for running Cho.
 
 ```bash
+# Install dependencies.
+python3 -m venv venv
+source ./venv/bin/activate
+pip install -r requirements.txt
+
+# Run the bot.
 source ./env.sh
 ./main.py
 
