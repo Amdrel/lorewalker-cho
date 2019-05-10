@@ -32,6 +32,7 @@ CMD_STOP = "stop"
 CMD_SCOREBOARD = "scoreboard"
 CMD_SET_CHANNEL = "set-channel"
 CMD_SET_PREFIX = "set-prefix"
+CMD_HELP = "help"
 
 DISCORD_CHANNEL_REGEX = re.compile("^<#([0-9]*)>$")
 ALLOWED_PREFIXES = set(["!", "&", "?", "|", "^", "%"])
@@ -73,7 +74,10 @@ class ChoClient(discord.Client):
         if self.user.id == message.author.id:
             return
 
-        LOGGER.debug("Message from \"%s\": %s", message.author, message.content)
+        LOGGER.debug(
+            "Message from \"%s\": %s",
+            message.author, message.content
+        )
 
         # Don't accept direct messages at this time. I might circle back later
         # and add support for private trivia sessions, but it's not a priority
@@ -135,6 +139,10 @@ class ChoClient(discord.Client):
 
         command = args[1].lower()
 
+        if command == CMD_HELP:
+            await self._handle_help(message, args, config)
+            return
+
         # Admin commands should be processed anywhere.
         if command == CMD_SET_CHANNEL:
             await self._handle_set_channel(message, args, config)
@@ -161,6 +169,56 @@ class ChoClient(discord.Client):
                 "I'm afraid I don't know that command. If you want to "
                 "start a game use the \"start\" command."
             )
+
+    async def _handle_help(self, message, args, config):
+        """Responds with help to teach users about the bot's functions.
+
+        :param m message:
+        :param list args:
+        :param dict config:
+        :type m: discord.message.Message
+        """
+
+        embed = discord.Embed(
+            title="Lorewalker Cho Commands",
+            description="Commands are typed as such: !cho 'command'",
+            color=discord.Color(0xf5f117))
+        embed.add_field(
+            name="help",
+            value="Shows the help information, you know, the stuff you're "
+                  "currently reading.",
+            inline=True)
+        embed.add_field(
+            name="start",
+            value="Starts a new trivia game.",
+            inline=True)
+        embed.add_field(
+            name="stop",
+            value="Stops the currently running trivia game.",
+            inline=True)
+        embed.add_field(
+            name="scoreboard",
+            value="Coming Soon!",
+            inline=True)
+        embed.add_field(
+            name="set-channel",
+            value="Changes the channel that the bot hosts trivia games in. "
+                  "Server admins only.",
+            inline=True)
+        embed.add_field(
+            name="set-prefix",
+            value="Changes the prefix used to summon Cho. Server admins only.",
+            inline=True)
+        embed.set_footer(text="Lorewalker Cho")
+
+        await message.channel.send(
+            "Nice to meet you, <@!{user_id}>. Here's all of the things you "
+            "can ask me to do!"
+            .format(
+                user_id=message.author.id
+            )
+        )
+        await message.channel.send(embed=embed)
 
     async def _handle_start_command(self, message, args, config):
         """Starts a new game at the request of a user.
