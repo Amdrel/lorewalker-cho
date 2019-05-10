@@ -73,7 +73,7 @@ class ChoClient(discord.Client):
         if self.user.id == message.author.id:
             return
 
-        LOGGER.info("Message from \"%s\": %s", message.author, message.content)
+        LOGGER.debug("Message from \"%s\": %s", message.author, message.content)
 
         # Don't accept direct messages at this time. I might circle back later
         # and add support for private trivia sessions, but it's not a priority
@@ -121,15 +121,9 @@ class ChoClient(discord.Client):
         if not guild_query_results:
             LOGGER.info("Got command from new guild: %s", guild_id)
             cho.create_guild(self.engine, guild_id)
-
-        _, config = guild_query_results
-
-        if not cho.is_message_from_trivia_channel(message, config):
-            await message.channel.send(
-                "Sorry, I can't be summoned into this channel. Please go "
-                "to the trivia channel for this server."
-            )
-            return
+            config = {}
+        else:
+            _, config = guild_query_results
 
         args = message.content.split()
         if len(args) < 2:
@@ -141,16 +135,27 @@ class ChoClient(discord.Client):
 
         command = args[1].lower()
 
+        # Admin commands should be processed anywhere.
+        if command == CMD_SET_CHANNEL:
+            await self._handle_set_channel(message, args, config)
+            return
+        elif command == CMD_SET_PREFIX:
+            await self._handle_set_prefix(message, args, config)
+            return
+
+        if not cho.is_message_from_trivia_channel(message, config):
+            await message.channel.send(
+                "Sorry, I can't be summoned into this channel. Please go "
+                "to the trivia channel for this server."
+            )
+            return
+
         if command == CMD_START:
             await self._handle_start_command(message, args, config)
         elif command == CMD_STOP:
             await self._handle_stop_command(message, args, config)
         elif command == CMD_SCOREBOARD:
             await self._handle_scoreboard_command(message, args, config)
-        elif command == CMD_SET_CHANNEL:
-            await self._handle_set_channel(message, args, config)
-        elif command == CMD_SET_PREFIX:
-            await self._handle_set_prefix(message, args, config)
         else:
             await message.channel.send(
                 "I'm afraid I don't know that command. If you want to "
@@ -453,7 +458,7 @@ class ChoClient(discord.Client):
                 "Alright we're out of questions, it seems to be a {}-way tie!\n\n"
                 "**Scoreboard**:\n{}"
                 "\nThank you for playing! I hope to see you again soon."
-                .format(str(ties), scoreboard)
+                .format(str(ties + 1), scoreboard)
             )
 
     def _cleanup_game(self, guild_id):
