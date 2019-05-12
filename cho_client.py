@@ -18,10 +18,12 @@
 
 import logging
 import discord
+
+from discord.message import Message
+
 import cho_utils
 import sql.guild
 
-from discord.message import Message
 from cho_commands import ChoCommandsMixin
 from cho_game import ChoGameMixin
 

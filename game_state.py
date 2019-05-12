@@ -20,6 +20,9 @@ import copy
 import json
 import random
 import uuid
+
+from sqlalchemy.engine import Engine
+
 import cho_utils
 import sql.game_state
 
@@ -31,7 +34,11 @@ CURRENT_REVISION = 0
 class GameState():
     """Python class representing a Cho game state."""
 
-    def __init__(self, engine, guild_id, active_game_dict=None):
+    def __init__(
+            self,
+            engine: Engine,
+            guild_id: int,
+            active_game_dict: dict = None):
         """Converts a game state dict into an object.
 
         :param e engine:
@@ -63,7 +70,7 @@ class GameState():
         self.correct_answers_total = 0
         self.waiting = False
 
-    def _select_questions(self, questions, count=3):
+    def _select_questions(self, questions: list, count=3) -> list:
         """Selects a bunch of random questions for a trivia session.
 
         :param list questions:
@@ -80,7 +87,7 @@ class GameState():
 
         self.complete = True
 
-    def serialize(self):
+    def serialize(self) -> str:
         """Converts the game state object into JSON so it an be stored.
 
         :rtype: str
@@ -105,7 +112,7 @@ class GameState():
 
         sql.game_state.save_game_state(self.engine, self)
 
-    def check_answer(self, answer, ratio=0.8):
+    def check_answer(self, answer: str, ratio=0.8) -> bool:
         """Checks an answer for correctness.
 
         Any answers that fall below the given ratio are incorrect, while any
@@ -128,7 +135,7 @@ class GameState():
 
         return False
 
-    def bump_score(self, user_id, amount=1):
+    def bump_score(self, user_id: int, amount=1):
         """Increases the score of a player by an amount.
 
         :param int user_id:
@@ -139,7 +146,7 @@ class GameState():
         self.scores[user_id] = user_score + amount
         self.correct_answers_total += 1
 
-    def get_question(self):
+    def get_question(self) -> dict:
         """Returns the current question."""
 
         return self.questions[self.current_question]
