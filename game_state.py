@@ -1,10 +1,27 @@
+# Lorewalker Cho is a Discord bot that plays WoW-inspired trivia games.
+# Copyright (C) 2019  Walter Kuppens
+
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 """Contains logic for mutating game states."""
 
 import copy
 import json
 import random
 import uuid
-import cho
+import cho_utils
+import sql.game_state
 
 from data.questions import DEFAULT_QUESTIONS
 
@@ -86,7 +103,7 @@ class GameState():
         if self.current_question >= len(self.questions):
             self._complete_game()
 
-        cho.save_game_state(self.engine, self)
+        sql.game_state.save_game_state(self.engine, self)
 
     def check_answer(self, answer, ratio=0.8):
         """Checks an answer for correctness.
@@ -105,7 +122,7 @@ class GameState():
         question = self.get_question()
 
         for correct_answer in question["answers"]:
-            answer_ratio = cho.levenshtein_ratio(answer, correct_answer)
+            answer_ratio = cho_utils.levenshtein_ratio(answer, correct_answer)
             if answer_ratio >= ratio:
                 return True
 
