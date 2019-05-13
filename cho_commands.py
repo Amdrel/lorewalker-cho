@@ -215,10 +215,38 @@ class ChoCommandsMixin():
         :type m: discord.message.Message
         """
 
-        await message.channel.send(
-            "Sorry, I currently don't track scores between games; however I "
-            "do plan on doing this soon! Ask me again later."
-        )
+        guild_id = message.guild.id
+        guild = self.get_guild(guild_id)
+
+        guild_scoreboard = sql.scoreboard.get_scoreboard(self.engine, guild_id)
+        if not guild_scoreboard:
+            guild_scoreboard = {}
+        else:
+            guild_scoreboard = guild_scoreboard[0]
+
+        scoreboard_message = "Here is the scoreboard for this server:\n"
+        score_count = 0
+
+        for user_id, score in guild_scoreboard.items():
+            member = guild.get_member(int(user_id))
+            if not member:
+                continue
+
+            if score != 1:
+                plural = "s"
+            else:
+                plural = ""
+
+            scoreboard_message += "\n- **{}**: {} point{}".format(
+                member.display_name, score, plural)
+            score_count += 1
+
+        if score_count > 0:
+            await message.channel.send(scoreboard_message)
+        else:
+            await message.channel.send(
+                "Currently no scores are available. Try playing a game to "
+                "get some scores in the scoreboard.")
 
     async def _handle_set_channel(self, message, args, config):
         """Updates the trivia channel configuration for the guild.

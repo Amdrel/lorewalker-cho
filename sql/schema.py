@@ -29,3 +29,17 @@ active_games = sa.Table(
     ),
     sa.Index("active_games_guild_id_idx", "guild_id", unique=True),
 )
+
+scoreboards = sa.Table(
+    "scoreboards",
+    metadata,
+    sa.Column("id", sa.BigInteger, primary_key=True),
+    sa.Column("guild_id", sa.BigInteger, nullable=False),
+    sa.Column("scores", postgresql.JSONB(), nullable=False),
+    sa.ForeignKeyConstraint(
+        ["guild_id"],
+        ["guilds.id"],
+        ondelete="CASCADE",
+    ),
+    sa.Index("scoreboards_guild_id_idx", "guild_id", unique=True),
+)

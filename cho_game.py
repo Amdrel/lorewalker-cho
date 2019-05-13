@@ -20,6 +20,7 @@ import asyncio
 import logging
 import cho_utils
 import sql.guild
+import sql.scoreboard
 
 from discord.channel import TextChannel
 from discord.guild import Guild
@@ -190,7 +191,8 @@ class ChoGameMixin():
         :type c: discord.channel.Channel
         """
 
-        self._cleanup_game(channel.guild.id)
+        guild_id = channel.guild.id
+        self._cleanup_game(guild_id)
 
         score_fmt = "{emoji} <@!{user_id}> - {score} point{suffix}\n"
         scores = list(game_state.scores.items())
@@ -210,6 +212,12 @@ class ChoGameMixin():
         ties = 0
         scoreboard = ""
 
+        guild_scoreboard = sql.scoreboard.get_scoreboard(self.engine, guild_id)
+        if not guild_scoreboard:
+            guild_scoreboard = {}
+        else:
+            guild_scoreboard = guild_scoreboard[0]
+
         for index, data in enumerate(scores):
             user_id, score = data
             if index > 0 and score >= highest_score:
@@ -221,6 +229,14 @@ class ChoGameMixin():
                 score=score,
                 suffix="s" if score != 0 else "",
             )
+
+            # Update the guild's scoreboard score for the current user. The
+            # score may not exist so default to zero.
+            guild_member_score = guild_scoreboard.get(str(user_id), 0)
+            guild_member_score += score
+            guild_scoreboard[str(user_id)] = guild_member_score
+
+        sql.scoreboard.save_scoreboard(self.engine, guild_id, guild_scoreboard)
 
         if ties == 0:
             await channel.send(
