@@ -194,7 +194,7 @@ class ChoCommandsMixin():
                 "Stopping game in guild %s, requested by %s",
                 guild_id, message.author
             )
-            self._cleanup_game(guild_id)
+            await self._stop_game(guild_id)
 
             await message.channel.send(
                 "I'm stopping the game for now. Maybe we can play another time?"

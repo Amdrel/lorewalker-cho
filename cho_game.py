@@ -48,6 +48,30 @@ class ChoGameMixin():
         if cho_utils.is_message_from_trivia_channel(message, config):
             await self._process_answer(message)
 
+    async def resume_incomplete_games(self):
+        """Resumes all inactive games, usually caused by the bot going down."""
+
+        incomplete_games = sql.active_game.get_incomplete_games(self.engine)
+
+        LOGGER.info(
+            "Found %d incomplete games that need to be resumed",
+            len(incomplete_games))
+
+        for guild_id, active_game_dict in incomplete_games:
+            existing_game_state = GameState(
+                self.engine,
+                guild_id,
+                active_game_dict=active_game_dict,
+                save_to_db=True)
+            self.active_games[guild_id] = existing_game_state
+
+            guild = self.get_guild(guild_id)
+
+            if guild:
+                channel = guild.get_channel(existing_game_state.channel_id)
+                asyncio.ensure_future(
+                    self._ask_question(channel, existing_game_state))
+
     async def _start_game(self, guild: Guild, channel: TextChannel):
         """Starts a new trivia game.
 
@@ -57,10 +81,21 @@ class ChoGameMixin():
         :type c: discord.channel.TextChannel
         """
 
-        new_game = self._create_game(guild.id)
+        new_game = self._create_game(guild.id, channel.id)
 
         await asyncio.sleep(SHORT_WAIT_SECS)
         await self._ask_question(channel, new_game)
+
+    async def _stop_game(self, guild_id: int):
+        """Stops a game in progress for a guild.
+
+        :param int guild_id:
+        """
+
+        game_state = self._get_game(guild_id)
+        game_state.stop_game()
+
+        self._cleanup_game(guild_id)
 
     async def _process_answer(self, message):
         """Called when an answer is received from a user.
@@ -202,7 +237,7 @@ class ChoGameMixin():
                 .format(str(ties + 1), scoreboard)
             )
 
-    def _cleanup_game(self, guild_id):
+    def _cleanup_game(self, guild_id: int):
         """Removes the game state of a guild from memory.
 
         :param int guild_id:
@@ -210,7 +245,7 @@ class ChoGameMixin():
 
         del self.active_games[guild_id]
 
-    def _get_game(self, guild_id):
+    def _get_game(self, guild_id: int) -> GameState:
         """Retrieves a guild's game state from memory.
 
         :param int guild_id:
@@ -220,19 +255,24 @@ class ChoGameMixin():
 
         return self.active_games[guild_id]
 
-    def _create_game(self, guild_id):
+    def _create_game(self, guild_id: int, channel_id: int) -> GameState:
         """Creates a new game state.
 
         :param int guild_id:
+        :param int channel_id:
         :rtype: GameState
         :return:
         """
 
-        new_game = GameState(self.engine, guild_id)
+        new_game = GameState(
+            self.engine,
+            guild_id,
+            channel_id=channel_id,
+            save_to_db=True)
         self.active_games[guild_id] = new_game
         return new_game
 
-    def _is_game_in_progress(self, guild_id):
+    def _is_game_in_progress(self, guild_id: int) -> bool:
         """Checks if a game is in progress for a guild.
 
         :param int guild_id:
@@ -242,7 +282,10 @@ class ChoGameMixin():
 
         return guild_id in self.active_games
 
-    def _is_same_game_in_progress(self, guild_id, game_state):
+    def _is_same_game_in_progress(
+            self,
+            guild_id: int,
+            game_state: GameState) -> bool:
         """Checks if the game of the specified game state is running.
 
         :param int guild_id:

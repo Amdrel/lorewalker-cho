@@ -21,9 +21,27 @@ import sqlalchemy as sa
 
 from sqlalchemy.engine.interfaces import Connectable
 from sqlalchemy.engine.result import ResultProxy
+
 from sql.schema import guilds, active_games
 
 LOGGER = logging.getLogger("cho")
+
+
+def get_incomplete_games(conn: Connectable) -> list:
+    """Queries for games that haven't finished (usually present on restart).
+
+    :param c conn:
+    :type c: sqlalchemy.engine.interfaces.Connectable
+    :rtype: list
+    :return:
+    """
+
+    query = sa.select([guilds.c.discord_guild_id, active_games.c.game_state]) \
+        .select_from(
+            sa.join(active_games, guilds,
+                    active_games.c.guild_id == guilds.c.id)) \
+        .where(active_games.c.game_state['complete'] == "false")
+    return conn.execute(query).fetchall()
 
 
 def get_game_state(conn: Connectable, guild_id: int) -> tuple:
@@ -47,13 +65,14 @@ def get_game_state(conn: Connectable, guild_id: int) -> tuple:
     return conn.execute(query).first()
 
 
-def save_game_state(conn: Connectable, game_state: dict) -> ResultProxy:
+def save_game_state(conn: Connectable, game_state) -> ResultProxy:
     """Saves a game state to the database.
 
     :param c conn:
-    :param dict game_state:
+    :param g game_state:
     :type c: sqlalchemy.engine.interfaces.Connectable
     :type r: sqlalchemy.engine.result.ResultProxy
+    :type g: game_state.GameState
     :rtype: r
     :return:
     """

@@ -16,10 +16,12 @@
 
 """Contains the Discord client class for Cho."""
 
+import asyncio
 import logging
 import discord
 
 from discord.message import Message
+from sqlalchemy.engine import Engine
 
 import cho_utils
 import sql.guild
@@ -33,7 +35,7 @@ LOGGER = logging.getLogger("cho")
 class ChoClient(ChoCommandsMixin, ChoGameMixin, discord.Client):
     """Discord client wrapper that uses functionality from cho.py."""
 
-    def __init__(self, engine):
+    def __init__(self, engine: Engine):
         """Initializes the ChoClient with a sqlalchemy connection pool.
 
         :param e engine: SQLAlchemy engine to make queries with.
@@ -52,6 +54,12 @@ class ChoClient(ChoCommandsMixin, ChoGameMixin, discord.Client):
         """Called when the bot has successfully connected to Discord."""
 
         LOGGER.info("Client logged in as \"%s\"", self.user)
+
+        await self.change_presence(
+            status=discord.Status.online,
+            activity=discord.Game(name="!cho help"))
+
+        asyncio.ensure_future(self.resume_incomplete_games())
 
     async def on_message(self, message: Message):
         """Called whenever the bot receives a message from Discord.

@@ -24,7 +24,7 @@ import uuid
 from sqlalchemy.engine import Engine
 
 import cho_utils
-import sql.game_state
+import sql.active_game
 
 from data.questions import DEFAULT_QUESTIONS
 
@@ -38,17 +38,22 @@ class GameState():
             self,
             engine: Engine,
             guild_id: int,
-            active_game_dict: dict = None):
+            channel_id: int = None,
+            active_game_dict: dict = None,
+            save_to_db=False):
         """Converts a game state dict into an object.
 
         :param e engine:
         :param int guild_id:
+        :param int channel_id:
         :param dict active_game_dict:
+        :param bool save_to_db:
         :type e: sqlalchemy.engine.Engine
         """
 
         self.engine = engine
         self.guild_id = guild_id
+        self.save_to_db = save_to_db
 
         if active_game_dict:
             if CURRENT_REVISION != active_game_dict["revision"]:
@@ -59,6 +64,7 @@ class GameState():
             self.current_question = active_game_dict["current_question"]
             self.complete = active_game_dict["complete"]
             self.scores = active_game_dict["scores"]
+            self.channel_id = active_game_dict["channel_id"]
         else:
             self.revision = CURRENT_REVISION
             self.questions = self._select_questions(DEFAULT_QUESTIONS)
@@ -66,9 +72,17 @@ class GameState():
             self.complete = False
             self.scores = {}
 
+            if channel_id is not None:
+                self.channel_id = channel_id
+            else:
+                raise TypeError("Field channel_id is required for GameState.")
+
         self.uuid = uuid.uuid4()
         self.correct_answers_total = 0
         self.waiting = False
+
+        if self.save_to_db:
+            sql.active_game.save_game_state(self.engine, self)
 
     def _select_questions(self, questions: list, count=3) -> list:
         """Selects a bunch of random questions for a trivia session.
@@ -87,6 +101,14 @@ class GameState():
 
         self.complete = True
 
+    def stop_game(self):
+        """Stops a game in progress."""
+
+        self._complete_game()
+
+        if self.save_to_db:
+            sql.active_game.save_game_state(self.engine, self)
+
     def serialize(self) -> str:
         """Converts the game state object into JSON so it an be stored.
 
@@ -94,13 +116,14 @@ class GameState():
         :return: JSON representation of the state that can be used for storage.
         """
 
-        return json.dumps({
+        return {
             "revision": CURRENT_REVISION,
             "questions": self.questions,
             "current_question": self.current_question,
             "complete": self.complete,
             "scores": self.scores,
-        })
+            "channel_id": self.channel_id,
+        }
 
     def step(self):
         """Advances the game forward."""
@@ -110,7 +133,8 @@ class GameState():
         if self.current_question >= len(self.questions):
             self._complete_game()
 
-        sql.game_state.save_game_state(self.engine, self)
+        if self.save_to_db:
+            sql.active_game.save_game_state(self.engine, self)
 
     def check_answer(self, answer: str, ratio=0.8) -> bool:
         """Checks an answer for correctness.
@@ -142,8 +166,8 @@ class GameState():
         :param int amount:
         """
 
-        user_score = self.scores.get(user_id, 0)
-        self.scores[user_id] = user_score + amount
+        user_score = self.scores.get(str(user_id), 0)
+        self.scores[str(user_id)] = user_score + amount
         self.correct_answers_total += 1
 
     def get_question(self) -> dict:
