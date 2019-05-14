@@ -83,7 +83,7 @@ class GameState():
         if self.save_to_db:
             sql.active_game.save_game_state(self.engine, self)
 
-    def _select_questions(self, questions: list, count=3) -> list:
+    def _select_questions(self, questions: list, count=10) -> list:
         """Selects a bunch of random questions for a trivia session.
 
         :param list questions:

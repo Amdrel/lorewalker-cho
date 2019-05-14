@@ -28,7 +28,7 @@ from discord.message import Message
 from game_state import GameState
 
 SHORT_WAIT_SECS = 5
-LONG_WAIT_SECS = 10
+LONG_WAIT_SECS = 30
 
 LOGGER = logging.getLogger("cho")
 
