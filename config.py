@@ -41,13 +41,17 @@ def setup_logging(debug=False, logpath: str = None):
 
     log_level = "DEBUG" if debug else "INFO"
     fmt = "%(asctime)-15s [%(levelname)s] %(message)s"
-
     logging.basicConfig(format=fmt)
+
     logger = logging.getLogger("cho")
     logger.setLevel(log_level)
+    discord_logger = logging.getLogger('discord')
+    discord_logger.setLevel("INFO")  # No debug for Discord (for now).
 
     if logpath:
-        fh = logging.FileHandler(logpath)
-        fh.setFormatter(logging.Formatter(fmt))
-        fh.setLevel(log_level)
-        logger.addHandler(fh)
+        handler = logging.FileHandler(filename=logpath, encoding='utf-8', mode='w')
+        handler.setFormatter(logging.Formatter(fmt))
+        handler.setLevel(log_level)
+
+        logger.addHandler(handler)
+        discord_logger.addHandler(handler)

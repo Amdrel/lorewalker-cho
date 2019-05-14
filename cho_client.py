@@ -18,6 +18,7 @@
 
 import asyncio
 import logging
+import traceback
 import discord
 
 from discord.message import Message
@@ -103,3 +104,10 @@ class ChoClient(ChoCommandsMixin, ChoGameMixin, discord.Client):
             await self.handle_command(message)
         elif self._is_game_in_progress(guild_id):
             await self.handle_message_response(message)
+
+    async def on_error(self, event):
+        """Logs exceptions to the bot's log."""
+
+        LOGGER.error(
+            "Received uncaught exception:\n\n%s"
+            % traceback.format_exc())
