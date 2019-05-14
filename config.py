@@ -19,6 +19,8 @@
 import logging
 import os
 
+from logging.handlers import RotatingFileHandler
+
 
 def get_postgres_url():
     """Generate a database connection url for sqlalchemy.
@@ -45,11 +47,16 @@ def setup_logging(debug=False, logpath: str = None):
 
     logger = logging.getLogger("cho")
     logger.setLevel(log_level)
-    discord_logger = logging.getLogger('discord')
+    discord_logger = logging.getLogger("discord")
     discord_logger.setLevel("INFO")  # No debug for Discord (for now).
 
     if logpath:
-        handler = logging.FileHandler(filename=logpath, encoding='utf-8', mode='w')
+        handler = RotatingFileHandler(
+            filename=logpath,
+            encoding="utf-8",
+            mode="a",
+            maxBytes=10000000,
+            backupCount=10)
         handler.setFormatter(logging.Formatter(fmt))
         handler.setLevel(log_level)
 
