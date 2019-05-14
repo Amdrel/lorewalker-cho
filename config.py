@@ -32,16 +32,22 @@ def get_postgres_url():
     )
 
 
-def setup_logging(debug=False):
+def setup_logging(debug=False, logpath: str = None):
     """Setup text logging for the bot.
 
     :param bool debug:
+    :param str logpath:
     """
 
-    logging.basicConfig(format="%(asctime)-15s [%(levelname)s] %(message)s")
-    logger = logging.getLogger("cho")
+    log_level = "DEBUG" if debug else "INFO"
+    fmt = "%(asctime)-15s [%(levelname)s] %(message)s"
 
-    if debug:
-        logger.setLevel("DEBUG")
-    else:
-        logger.setLevel("INFO")
+    logging.basicConfig(format=fmt)
+    logger = logging.getLogger("cho")
+    logger.setLevel(log_level)
+
+    if logpath:
+        fh = logging.FileHandler(logpath)
+        fh.setFormatter(logging.Formatter(fmt))
+        fh.setLevel(log_level)
+        logger.addHandler(fh)

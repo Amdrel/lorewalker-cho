@@ -39,11 +39,13 @@ def main():
     parser = argparse.ArgumentParser(description="Start a Cho Trivia worker.")
     parser.add_argument("--debug", action='store_true', default=False,
                         help="Enable debug logging.")
+    parser.add_argument("--log", help="Specify a log file path to log to.")
+    parser.add_argument("--shard", help="Discord shard (unused for now).")
     args = parser.parse_args()
 
-    config.setup_logging(debug=args.debug)
+    config.setup_logging(debug=args.debug, logpath=args.log)
 
-    LOGGER.info("Starting Cho Trivia worker.")
+    LOGGER.info("Starting Lorewalker Cho worker (shard ?).")
     LOGGER.debug("Debug logging activated.")
 
     # Connect to the postgres database and setup connection pools.
