@@ -105,7 +105,7 @@ class ChoClient(ChoCommandsMixin, ChoGameMixin, discord.Client):
         elif self._is_game_in_progress(guild_id):
             await self.handle_message_response(message)
 
-    async def on_error(self, event):
+    async def on_error(self, event_name, *args, **kwargs):
         """Logs exceptions to the bot's log."""
 
         LOGGER.error(
