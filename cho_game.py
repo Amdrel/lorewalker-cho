@@ -44,7 +44,12 @@ class ChoGameMixin():
         """
 
         guild_id = guild_id = message.guild.id
-        _, config = sql.guild.get_guild(self.engine, guild_id)
+
+        guild_query_results = sql.guild.get_guild(self.engine, guild_id)
+        if guild_query_results:
+            _, config = guild_query_results
+        else:
+            config = {}
 
         if cho_utils.is_message_from_trivia_channel(message, config):
             await self._process_answer(message)

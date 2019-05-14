@@ -56,7 +56,7 @@ def create_guild(
 
     query = guilds.insert(None).values({
         "discord_guild_id": guild_id,
-        "config": config,
+        "config": config or {},
     })
     return conn.execute(query)
 
@@ -77,6 +77,6 @@ def update_guild_config(
     """
 
     query = guilds.update(None).values({
-        "config": config,
+        "config": config or {},
     }).where(guilds.c.discord_guild_id == guild_id)
     return conn.execute(query)

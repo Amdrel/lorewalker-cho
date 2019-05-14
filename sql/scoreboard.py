@@ -74,7 +74,7 @@ def save_scoreboard(conn: Connectable, guild_id: int, scores) -> ResultProxy:
         LOGGER.debug("Updating existing scoreboard.")
 
         query = scoreboards.update(None).values({
-            "scores": scores,
+            "scores": scores or {},
         }).where(scoreboards.c.id == existing_scoreboard_id[0])
         return conn.execute(query)
     else:
@@ -82,6 +82,6 @@ def save_scoreboard(conn: Connectable, guild_id: int, scores) -> ResultProxy:
 
         query = scoreboards.insert(None).values({
             "guild_id": guild_id_fkey[0],
-            "scores": scores,
+            "scores": scores or {},
         })
         return conn.execute(query)
