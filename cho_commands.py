@@ -131,7 +131,8 @@ class ChoCommandsMixin():
             inline=True)
         embed.add_field(
             name=CMD_SCOREBOARD,
-            value="Coming Soon!",
+            value="Shows the server's scoreboard which shows all points "
+                  "earned by members of the server.",
             inline=True)
         embed.add_field(
             name=CMD_SET_CHANNEL,
