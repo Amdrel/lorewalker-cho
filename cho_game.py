@@ -18,13 +18,15 @@
 
 import asyncio
 import logging
-import cho_utils
-import sql.guild
-import sql.scoreboard
 
 from discord.channel import TextChannel
 from discord.guild import Guild
 from discord.message import Message
+
+import cho_utils
+import sql.guild
+import sql.scoreboard
+
 from game_state import GameState
 
 SHORT_WAIT_SECS = 5

@@ -19,8 +19,9 @@
 import logging
 import re
 import discord
-import cho_utils
 import sql.guild
+
+from cho_utils import cho_command
 
 CMD_START = "start"
 CMD_STOP = "stop"
@@ -38,71 +39,7 @@ LOGGER = logging.getLogger("cho")
 class ChoCommandsMixin():
     """Contains command handler functions for ChoClient."""
 
-    async def handle_command(self, message):
-        """Called when a Cho command is received from a user.
-
-        :param m message:
-        :type m: discord.message.Message
-        """
-
-        guild_id = message.guild.id
-
-        # This is a good opportunity to make sure the guild we're getting a
-        # command from is setup properly in the database.
-        guild_query_results = sql.guild.get_guild(self.engine, guild_id)
-        if not guild_query_results:
-            LOGGER.info("Got command from new guild: %s", guild_id)
-            sql.guild.create_guild(self.engine, guild_id)
-            config = {}
-        else:
-            _, config = guild_query_results
-
-        args = message.content.split()
-        if len(args) < 2:
-            await message.channel.send(
-                "You didn't specify a command. If you want to "
-                "start a game use the \"start\" command."
-            )
-            return
-
-        command = args[1].lower()
-
-        if command == CMD_HELP:
-            await self._handle_help(message, args, config)
-            return
-
-        # Admin commands should be processed anywhere.
-        if command == CMD_SET_CHANNEL:
-            await self._handle_set_channel(message, args, config)
-            return
-        elif command == CMD_SET_PREFIX:
-            await self._handle_set_prefix(message, args, config)
-            return
-
-        # Anything not handled above must be done in the configured channel.
-        if not cho_utils.is_message_from_trivia_channel(message, config):
-            await message.channel.send(
-                "Sorry, I can't be summoned into this channel. Please go "
-                "to the trivia channel for this server."
-            )
-            return
-
-        # Trivia channel-only commands.
-        if command == CMD_START:
-            await self._handle_start_command(message, args, config)
-            return
-        elif command == CMD_STOP:
-            await self._handle_stop_command(message, args, config)
-            return
-        elif command == CMD_SCOREBOARD:
-            await self._handle_scoreboard_command(message, args, config)
-            return
-
-        await message.channel.send(
-            "I'm afraid I don't know that command. If you want to "
-            "start a game use the \"start\" command."
-        )
-
+    @cho_command(CMD_HELP)
     async def _handle_help(self, message, args, config):
         """Responds with help to teach users about the bot's functions.
 
@@ -154,6 +91,7 @@ class ChoCommandsMixin():
         )
         await message.channel.send(embed=embed)
 
+    @cho_command(CMD_START, kind="channel")
     async def _handle_start_command(self, message, args, config):
         """Starts a new game at the request of a user.
 
@@ -179,6 +117,7 @@ class ChoCommandsMixin():
         )
         await self._start_game(message.guild, message.channel)
 
+    @cho_command(CMD_STOP, kind="channel")
     async def _handle_stop_command(self, message, args, config):
         """Stops the current game at the request of the user.
 
@@ -207,6 +146,7 @@ class ChoCommandsMixin():
                 "one first."
             )
 
+    @cho_command(CMD_SCOREBOARD, kind="channel")
     async def _handle_scoreboard_command(self, message, args, config):
         """Displays a scoreboard at the request of the user.
 
@@ -249,6 +189,7 @@ class ChoCommandsMixin():
                 "Currently no scores are available. Try playing a game to "
                 "get some scores in the scoreboard.")
 
+    @cho_command(CMD_SET_CHANNEL, admin_only=True)
     async def _handle_set_channel(self, message, args, config):
         """Updates the trivia channel configuration for the guild.
 
@@ -261,12 +202,6 @@ class ChoCommandsMixin():
         if len(args) < 3:
             await message.channel.send(
                 "Please specify a channel when using \"set-channel\"."
-            )
-            return
-
-        if not cho_utils.is_admin(message.author, message.channel):
-            await message.channel.send(
-                "Sorry, only administrators can move me."
             )
             return
 
@@ -289,6 +224,7 @@ class ChoCommandsMixin():
             "The trivia channel is now in {}.".format(trivia_channel_id)
         )
 
+    @cho_command(CMD_SET_PREFIX, admin_only=True)
     async def _handle_set_prefix(self, message, args, config):
         """Updates the prefix used for the guild.
 
@@ -301,12 +237,6 @@ class ChoCommandsMixin():
         if len(args) < 3:
             await message.channel.send(
                 "Please specify a prefix when using \"set-prefix\"."
-            )
-            return
-
-        if not cho_utils.is_admin(message.author, message.channel):
-            await message.channel.send(
-                "Sorry, only administrators can change the prefix."
             )
             return
 

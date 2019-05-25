@@ -17,6 +17,9 @@
 """Core code that controls Cho's behavior."""
 
 import logging
+
+from collections import OrderedDict
+
 import jellyfish
 
 from discord.channel import TextChannel
@@ -26,6 +29,38 @@ from discord.message import Message
 DEFAULT_PREFIX = "!"
 
 LOGGER = logging.getLogger("cho")
+
+GLOBAL_COMMANDS = OrderedDict()
+CHANNEL_COMMANDS = OrderedDict()
+
+
+def cho_command(command, kind="global", admin_only=False):
+    """Marks a function as a runnable command."""
+
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            if admin_only:
+                message = args[1]
+
+                if not is_admin(message.author, message.channel):
+                    return message.channel.send(
+                        "Sorry, only administrators run that command."
+                    )
+
+                return func(*args, **kwargs)
+
+            return func(*args, **kwargs)
+
+        if kind == "global":
+            GLOBAL_COMMANDS[command] = wrapper
+        elif kind == "channel":
+            CHANNEL_COMMANDS[command] = wrapper
+        else:
+            raise ValueError("Unknown cho command type passed in decorator.")
+
+        return wrapper
+
+    return decorator
 
 
 def get_prefix(config: dict = None) -> str:

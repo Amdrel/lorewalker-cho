@@ -108,6 +108,64 @@ class ChoClient(ChoCommandsMixin, ChoGameMixin, discord.Client):
     async def on_error(self, event_name, *args, **kwargs):
         """Logs exceptions to the bot's log."""
 
-        LOGGER.error(
-            "Received uncaught exception:\n\n%s"
-            % traceback.format_exc())
+        stack_trace = traceback.format_exc()
+        LOGGER.error("Received uncaught exception:\n\n%s", stack_trace)
+
+    async def handle_command(self, message):
+        """Called when a Cho command is received from a user.
+
+        :param m message:
+        :type m: discord.message.Message
+        """
+
+        guild_id = message.guild.id
+
+        # This is a good opportunity to make sure the guild we're getting a
+        # command from is setup properly in the database.
+        guild_query_results = sql.guild.get_guild(self.engine, guild_id)
+        if not guild_query_results:
+            LOGGER.info("Got command from new guild: %s", guild_id)
+            sql.guild.create_guild(self.engine, guild_id)
+            config = {}
+        else:
+            _, config = guild_query_results
+
+        # TODO: Come up with a better way to split up arguments. If we want to
+        # support flags in the future this might need to be done using a real
+        # argument parser.
+        args = message.content.split()
+
+        # Handle cho invocations with no command.
+        if len(args) < 2:
+            await message.channel.send(
+                "You didn't specify a command. If you want to "
+                "start a game use the \"start\" command."
+            )
+            return
+
+        command = args[1].lower()
+
+        # Process commands that are marked for global usage.
+        for global_command, func in cho_utils.GLOBAL_COMMANDS.items():
+            if global_command == command:
+                await func(self, message, args, config)
+                return
+
+        # Anything not handled above must be done in the configured channel.
+        if not cho_utils.is_message_from_trivia_channel(message, config):
+            await message.channel.send(
+                "Sorry, I can't be summoned into this channel. Please go "
+                "to the trivia channel for this server."
+            )
+            return
+
+        # Process commands that are marked for channel-only usage.
+        for channel_command, func in cho_utils.CHANNEL_COMMANDS.items():
+            if channel_command == command:
+                await func(self, message, args, config)
+                return
+
+        await message.channel.send(
+            "I'm afraid I don't know that command. If you want to "
+            "start a game use the \"start\" command."
+        )
