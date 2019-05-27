@@ -23,9 +23,12 @@ python3 -m venv venv
 source ./venv/bin/activate
 pip install -r requirements.txt
 
-# Run the bot.
+# Setup the postgres database schema (requires an empty db)
 source ./env.sh
-./main.py
+alembic upgrade head
+
+# Run the bot.
+./run.sh
 
 # Done!
 ```
