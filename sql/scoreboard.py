@@ -22,7 +22,7 @@ import sqlalchemy as sa
 from sqlalchemy.engine.interfaces import Connectable
 from sqlalchemy.engine.result import ResultProxy
 
-from sql.schema import guilds, scoreboards
+from sql.schema import GUILDS, SCOREBOARDS
 
 LOGGER = logging.getLogger("cho")
 
@@ -37,13 +37,13 @@ def get_scoreboard(conn: Connectable, guild_id: int) -> tuple:
     :return:
     """
 
-    query = sa.select([guilds.c.id]) \
-        .where(guilds.c.discord_guild_id == guild_id) \
+    query = sa.select([GUILDS.c.id]) \
+        .where(GUILDS.c.discord_guild_id == guild_id) \
         .limit(1)
     guild_id_fkey = conn.execute(query).first()
 
-    query = sa.select([scoreboards.c.scores]) \
-        .where(scoreboards.c.guild_id == guild_id_fkey[0]) \
+    query = sa.select([SCOREBOARDS.c.scores]) \
+        .where(SCOREBOARDS.c.guild_id == guild_id_fkey[0]) \
         .limit(1)
     return conn.execute(query).first()
 
@@ -60,28 +60,28 @@ def save_scoreboard(conn: Connectable, guild_id: int, scores) -> ResultProxy:
     :return:
     """
 
-    query = sa.select([guilds.c.id]) \
-        .where(guilds.c.discord_guild_id == guild_id) \
+    query = sa.select([GUILDS.c.id]) \
+        .where(GUILDS.c.discord_guild_id == guild_id) \
         .limit(1)
     guild_id_fkey = conn.execute(query).first()
 
-    query = sa.select([scoreboards.c.id]) \
-        .where(scoreboards.c.guild_id == guild_id_fkey[0]) \
+    query = sa.select([SCOREBOARDS.c.id]) \
+        .where(SCOREBOARDS.c.guild_id == guild_id_fkey[0]) \
         .limit(1)
     existing_scoreboard_id = conn.execute(query).first()
 
     if existing_scoreboard_id is not None:
         LOGGER.debug("Updating existing scoreboard.")
 
-        query = scoreboards.update(None).values({
+        query = SCOREBOARDS.update(None).values({
             "scores": scores or {},
-        }).where(scoreboards.c.id == existing_scoreboard_id[0])
+        }).where(SCOREBOARDS.c.id == existing_scoreboard_id[0])
         return conn.execute(query)
-    else:
-        LOGGER.debug("Creating new scoreboard.")
 
-        query = scoreboards.insert(None).values({
-            "guild_id": guild_id_fkey[0],
-            "scores": scores or {},
-        })
-        return conn.execute(query)
+    LOGGER.debug("Creating new scoreboard.")
+
+    query = SCOREBOARDS.insert(None).values({
+        "guild_id": guild_id_fkey[0],
+        "scores": scores or {},
+    })
+    return conn.execute(query)

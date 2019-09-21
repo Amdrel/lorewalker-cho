@@ -20,7 +20,7 @@ import sqlalchemy as sa
 
 from sqlalchemy.engine.interfaces import Connectable
 from sqlalchemy.engine.result import ResultProxy
-from sql.schema import guilds
+from sql.schema import GUILDS
 
 
 def get_guild(conn: Connectable, guild_id: int) -> tuple:
@@ -33,8 +33,8 @@ def get_guild(conn: Connectable, guild_id: int) -> tuple:
     :return:
     """
 
-    query = sa.select([guilds.c.discord_guild_id, guilds.c.config]) \
-        .where(guilds.c.discord_guild_id == guild_id) \
+    query = sa.select([GUILDS.c.discord_guild_id, GUILDS.c.config]) \
+        .where(GUILDS.c.discord_guild_id == guild_id) \
         .limit(1)
     return conn.execute(query).first()
 
@@ -54,7 +54,7 @@ def create_guild(
     :return:
     """
 
-    query = guilds.insert(None).values({
+    query = GUILDS.insert(None).values({
         "discord_guild_id": guild_id,
         "config": config or {},
     })
@@ -76,7 +76,7 @@ def update_guild_config(
     :return:
     """
 
-    query = guilds.update(None).values({
+    query = GUILDS.update(None).values({
         "config": config or {},
-    }).where(guilds.c.discord_guild_id == guild_id)
+    }).where(GUILDS.c.discord_guild_id == guild_id)
     return conn.execute(query)

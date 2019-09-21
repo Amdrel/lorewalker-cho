@@ -24,7 +24,7 @@ import os
 import sqlalchemy as sa
 import config
 
-from cho_client import ChoClient
+from lorewalker_cho import LorewalkerCho
 
 DISCORD_TOKEN = os.environ["CHO_DISCORD_TOKEN"]
 SQLALCHEMY_POOL_SIZE = int(os.environ.get("SQLALCHEMY_POOL_SIZE", 6))
@@ -58,7 +58,7 @@ def main():
     engine.connect()
     LOGGER.info("Started connection pool with size: %d", SQLALCHEMY_POOL_SIZE)
 
-    discord_client = ChoClient(engine)
+    discord_client = LorewalkerCho(engine)
     discord_client.run(DISCORD_TOKEN)
     LOGGER.info("Shutting down... good bye!")
 

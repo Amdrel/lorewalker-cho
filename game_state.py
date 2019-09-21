@@ -22,7 +22,7 @@ import uuid
 
 from sqlalchemy.engine import Engine
 
-import cho_utils
+import utils
 import sql.active_game
 
 from data.questions import DEFAULT_QUESTIONS
@@ -38,14 +38,14 @@ class GameState():
             engine: Engine,
             guild_id: int,
             channel_id: int = None,
-            active_game_dict: dict = None,
+            existing_game: dict = None,
             save_to_db=False):
         """Converts a game state dict into an object.
 
         :param e engine:
         :param int guild_id:
         :param int channel_id:
-        :param dict active_game_dict:
+        :param dict existing_game:
         :param bool save_to_db:
         :type e: sqlalchemy.engine.Engine
         """
@@ -54,19 +54,19 @@ class GameState():
         self.guild_id = guild_id
         self.save_to_db = save_to_db
 
-        if active_game_dict:
-            if CURRENT_REVISION != active_game_dict["revision"]:
+        if existing_game:
+            if CURRENT_REVISION != existing_game["revision"]:
                 raise ValueError("GameState revision mismatch.")
 
             self.revision = CURRENT_REVISION
-            self.questions = active_game_dict["questions"]
-            self.current_question = active_game_dict["current_question"]
-            self.complete = active_game_dict["complete"]
-            self.scores = active_game_dict["scores"]
-            self.channel_id = active_game_dict["channel_id"]
+            self.questions = existing_game["questions"]
+            self.current_question = existing_game["current_question"]
+            self.complete = existing_game["complete"]
+            self.scores = existing_game["scores"]
+            self.channel_id = existing_game["channel_id"]
         else:
             self.revision = CURRENT_REVISION
-            self.questions = self._select_questions(DEFAULT_QUESTIONS)
+            self.questions = self.__select_questions(DEFAULT_QUESTIONS)
             self.current_question = 0
             self.complete = False
             self.scores = {}
@@ -83,7 +83,8 @@ class GameState():
         if self.save_to_db:
             sql.active_game.save_game_state(self.engine, self)
 
-    def _select_questions(self, questions: list, count=10) -> list:
+    @staticmethod
+    def __select_questions(questions: list, count=10) -> list:
         """Selects a bunch of random questions for a trivia session.
 
         :param list questions:
@@ -95,18 +96,10 @@ class GameState():
 
         return cloned_questions[:count]
 
-    def _complete_game(self):
+    def __complete_game(self):
         """Completes the game and determines the winner."""
 
         self.complete = True
-
-    def stop_game(self):
-        """Stops a game in progress."""
-
-        self._complete_game()
-
-        if self.save_to_db:
-            sql.active_game.save_game_state(self.engine, self)
 
     def serialize(self) -> str:
         """Converts the game state object into JSON so it an be stored.
@@ -124,16 +117,41 @@ class GameState():
             "channel_id": self.channel_id,
         }
 
+    def stop_game(self):
+        """Stops a game in progress."""
+
+        self.__complete_game()
+
+        if self.save_to_db:
+            sql.active_game.save_game_state(self.engine, self)
+
     def step(self):
-        """Advances the game forward."""
+        """Advances the game forward to the next question.
+
+        This function will check if the game is complete and ensure the
+        active game state is saved to the database as it's likely the game
+        state was mutated before this function was called.
+        """
 
         self.current_question += 1
 
         if self.current_question >= len(self.questions):
-            self._complete_game()
+            self.__complete_game()
 
         if self.save_to_db:
             sql.active_game.save_game_state(self.engine, self)
+
+    def bump_score(self, user_id: int, amount=1):
+        """Increases the score of a player by an amount.
+
+        :param int user_id:
+        :param int amount:
+        """
+
+        user_score = self.scores.get(str(user_id), 0)
+
+        self.scores[str(user_id)] = user_score + amount
+        self.correct_answers_total += 1
 
     def check_answer(self, answer: str, ratio=0.8) -> bool:
         """Checks an answer for correctness.
@@ -152,22 +170,11 @@ class GameState():
         question = self.get_question()
 
         for correct_answer in question["answers"]:
-            answer_ratio = cho_utils.levenshtein_ratio(answer, correct_answer)
+            answer_ratio = utils.levenshtein_ratio(answer, correct_answer)
             if answer_ratio >= ratio:
                 return True
 
         return False
-
-    def bump_score(self, user_id: int, amount=1):
-        """Increases the score of a player by an amount.
-
-        :param int user_id:
-        :param int amount:
-        """
-
-        user_score = self.scores.get(str(user_id), 0)
-        self.scores[str(user_id)] = user_score + amount
-        self.correct_answers_total += 1
 
     def get_question(self) -> dict:
         """Returns the current question."""

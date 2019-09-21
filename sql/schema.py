@@ -17,11 +17,11 @@
 import sqlalchemy as sa
 import sqlalchemy.dialects.postgresql as postgresql
 
-metadata = sa.MetaData()
+METADATA = sa.MetaData()
 
-guilds = sa.Table(
+GUILDS = sa.Table(
     "guilds",
-    metadata,
+    METADATA,
     sa.Column("id", sa.BigInteger, primary_key=True),
     sa.Column("discord_guild_id", sa.BigInteger, nullable=False),
     sa.Column("config", postgresql.JSONB(), nullable=False),
@@ -32,9 +32,9 @@ guilds = sa.Table(
     ),
 )
 
-active_games = sa.Table(
+ACTIVE_GAMES = sa.Table(
     "active_games",
-    metadata,
+    METADATA,
     sa.Column("id", sa.BigInteger, primary_key=True),
     sa.Column("guild_id", sa.BigInteger, nullable=False),
     sa.Column("game_state", postgresql.JSONB(), nullable=False),
@@ -46,9 +46,9 @@ active_games = sa.Table(
     sa.Index("active_games_guild_id_idx", "guild_id", unique=True),
 )
 
-scoreboards = sa.Table(
+SCOREBOARDS = sa.Table(
     "scoreboards",
-    metadata,
+    METADATA,
     sa.Column("id", sa.BigInteger, primary_key=True),
     sa.Column("guild_id", sa.BigInteger, nullable=False),
     sa.Column("scores", postgresql.JSONB(), nullable=False),

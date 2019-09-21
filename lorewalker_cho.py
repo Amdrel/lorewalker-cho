@@ -19,21 +19,23 @@
 import asyncio
 import logging
 import traceback
+
+from commands import CommandsMixin
+
 import discord
 
 from discord.message import Message
 from sqlalchemy.engine import Engine
 
-import cho_utils
+import utils
 import sql.guild
 
-from cho_commands import ChoCommandsMixin
-from cho_game import ChoGameMixin
+from game import GameMixin
 
 LOGGER = logging.getLogger("cho")
 
 
-class ChoClient(ChoCommandsMixin, ChoGameMixin, discord.Client):
+class LorewalkerCho(CommandsMixin, GameMixin, discord.Client):
     """Discord client wrapper that uses functionality from cho.py."""
 
     def __init__(self, engine: Engine):
@@ -96,13 +98,13 @@ class ChoClient(ChoCommandsMixin, ChoGameMixin, discord.Client):
         results = sql.guild.get_guild(self.engine, guild_id)
         if results:
             _, config = results
-            prefix = cho_utils.get_prefix(config)
+            prefix = utils.get_prefix(config)
         else:
-            prefix = cho_utils.get_prefix(None)
+            prefix = utils.get_prefix(None)
 
-        if cho_utils.is_command(message, prefix):
+        if utils.is_command(message, prefix):
             await self.handle_command(message)
-        elif self._is_game_in_progress(guild_id):
+        elif self.is_game_in_progress(guild_id):
             await self.handle_message_response(message)
 
     async def on_error(self, event_name, *args, **kwargs):
@@ -146,13 +148,13 @@ class ChoClient(ChoCommandsMixin, ChoGameMixin, discord.Client):
         command = args[1].lower()
 
         # Process commands that are marked for global usage.
-        for global_command, func in cho_utils.GLOBAL_COMMANDS.items():
+        for global_command, func in utils.GLOBAL_COMMANDS.items():
             if global_command == command:
                 await func(self, message, args, config)
                 return
 
         # Anything not handled above must be done in the configured channel.
-        if not cho_utils.is_message_from_trivia_channel(message, config):
+        if not utils.is_message_from_trivia_channel(message, config):
             await message.channel.send(
                 "Sorry, I can't be summoned into this channel. Please go "
                 "to the trivia channel for this server."
@@ -160,7 +162,7 @@ class ChoClient(ChoCommandsMixin, ChoGameMixin, discord.Client):
             return
 
         # Process commands that are marked for channel-only usage.
-        for channel_command, func in cho_utils.CHANNEL_COMMANDS.items():
+        for channel_command, func in utils.CHANNEL_COMMANDS.items():
             if channel_command == command:
                 await func(self, message, args, config)
                 return
@@ -169,3 +171,21 @@ class ChoClient(ChoCommandsMixin, ChoGameMixin, discord.Client):
             "I'm afraid I don't know that command. If you want to "
             "start a game use the \"start\" command."
         )
+
+    async def handle_message_response(self, message: Message):
+        """Processes a non-command message received during an active game.
+
+        :param m message:
+        :type m: discord.message.Message
+        """
+
+        guild_id = guild_id = message.guild.id
+
+        guild_query_results = sql.guild.get_guild(self.engine, guild_id)
+        if guild_query_results:
+            _, config = guild_query_results
+        else:
+            config = {}
+
+        if utils.is_message_from_trivia_channel(message, config):
+            await self.process_answer(message)

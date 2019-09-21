@@ -18,10 +18,11 @@
 
 import logging
 import re
+
 import discord
 import sql.guild
 
-from cho_utils import cho_command
+from utils import cho_command
 
 CMD_START = "start"
 CMD_STOP = "stop"
@@ -36,11 +37,11 @@ ALLOWED_PREFIXES = set(["!", "&", "?", "|", "^", "%"])
 LOGGER = logging.getLogger("cho")
 
 
-class ChoCommandsMixin():
+class CommandsMixin():
     """Contains command handler functions for ChoClient."""
 
     @cho_command(CMD_HELP)
-    async def _handle_help(self, message, args, config):
+    async def handle_help(self, message, args, config):
         """Responds with help to teach users about the bot's functions.
 
         :param m message:
@@ -92,7 +93,7 @@ class ChoCommandsMixin():
         await message.channel.send(embed=embed)
 
     @cho_command(CMD_START, kind="channel")
-    async def _handle_start_command(self, message, args, config):
+    async def handle_start_command(self, message, args, config):
         """Starts a new game at the request of a user.
 
         :param m message:
@@ -101,7 +102,7 @@ class ChoCommandsMixin():
         :type m: discord.message.Message
         """
 
-        if self._is_game_in_progress(message.guild.id):
+        if self.is_game_in_progress(message.guild.id):
             await message.channel.send(
                 "A game is already active in the trivia channel. If you "
                 "want to participate please go in there."
@@ -115,10 +116,10 @@ class ChoCommandsMixin():
         await message.channel.send(
             "Okay I'm starting a game. Don't expect me to go easy."
         )
-        await self._start_game(message.guild, message.channel)
+        await self.start_game(message.guild, message.channel)
 
     @cho_command(CMD_STOP, kind="channel")
-    async def _handle_stop_command(self, message, args, config):
+    async def handle_stop_command(self, message, args, config):
         """Stops the current game at the request of the user.
 
         :param m message:
@@ -129,12 +130,12 @@ class ChoCommandsMixin():
 
         guild_id = message.guild.id
 
-        if self._is_game_in_progress(guild_id):
+        if self.is_game_in_progress(guild_id):
             LOGGER.info(
                 "Stopping game in guild %s, requested by %s",
                 guild_id, message.author
             )
-            await self._stop_game(guild_id)
+            await self.stop_game(guild_id)
 
             await message.channel.send(
                 "I'm stopping the game for now. Maybe we can play another time?"
@@ -147,7 +148,7 @@ class ChoCommandsMixin():
             )
 
     @cho_command(CMD_SCOREBOARD, kind="channel")
-    async def _handle_scoreboard_command(self, message, args, config):
+    async def handle_scoreboard_command(self, message, args, config):
         """Displays a scoreboard at the request of the user.
 
         :param m message:
@@ -190,7 +191,7 @@ class ChoCommandsMixin():
                 "get some scores in the scoreboard.")
 
     @cho_command(CMD_SET_CHANNEL, admin_only=True)
-    async def _handle_set_channel(self, message, args, config):
+    async def handle_set_channel(self, message, args, config):
         """Updates the trivia channel configuration for the guild.
 
         :param m message:
@@ -225,7 +226,7 @@ class ChoCommandsMixin():
         )
 
     @cho_command(CMD_SET_PREFIX, admin_only=True)
-    async def _handle_set_prefix(self, message, args, config):
+    async def handle_set_prefix(self, message, args, config):
         """Updates the prefix used for the guild.
 
         :param m message:

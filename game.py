@@ -21,9 +21,7 @@ import logging
 
 from discord.channel import TextChannel
 from discord.guild import Guild
-from discord.message import Message
 
-import cho_utils
 import sql.guild
 import sql.scoreboard
 
@@ -35,26 +33,16 @@ LONG_WAIT_SECS = 30
 LOGGER = logging.getLogger("cho")
 
 
-class ChoGameMixin():
+class GameMixin():
     """Adds trivia game logic to ChoClient. Gotta love compartmentalization."""
 
-    async def handle_message_response(self, message: Message):
-        """Processes a non-command message received during an active game.
+    def __cleanup_game(self, guild_id: int):
+        """Removes the game state of a guild from memory.
 
-        :param m message:
-        :type m: discord.message.Message
+        :param int guild_id:
         """
 
-        guild_id = guild_id = message.guild.id
-
-        guild_query_results = sql.guild.get_guild(self.engine, guild_id)
-        if guild_query_results:
-            _, config = guild_query_results
-        else:
-            config = {}
-
-        if cho_utils.is_message_from_trivia_channel(message, config):
-            await self._process_answer(message)
+        del self.active_games[guild_id]
 
     async def resume_incomplete_games(self):
         """Resumes all inactive games, usually caused by the bot going down."""
@@ -65,22 +53,21 @@ class ChoGameMixin():
             "Found %d incomplete games that need to be resumed",
             len(incomplete_games))
 
-        for guild_id, active_game_dict in incomplete_games:
+        for guild_id, existing_game in incomplete_games:
             existing_game_state = GameState(
                 self.engine,
                 guild_id,
-                active_game_dict=active_game_dict,
+                existing_game=existing_game,
                 save_to_db=True)
             self.active_games[guild_id] = existing_game_state
 
             guild = self.get_guild(guild_id)
-
             if guild:
                 channel = guild.get_channel(existing_game_state.channel_id)
                 asyncio.ensure_future(
-                    self._ask_question(channel, existing_game_state))
+                    self.ask_question(channel, existing_game_state))
 
-    async def _start_game(self, guild: Guild, channel: TextChannel):
+    async def start_game(self, guild: Guild, channel: TextChannel):
         """Starts a new trivia game.
 
         :param g guild:
@@ -89,30 +76,30 @@ class ChoGameMixin():
         :type c: discord.channel.TextChannel
         """
 
-        new_game = self._create_game(guild.id, channel.id)
+        new_game = self.create_game(guild.id, channel.id)
 
         await asyncio.sleep(SHORT_WAIT_SECS)
-        await self._ask_question(channel, new_game)
+        await self.ask_question(channel, new_game)
 
-    async def _stop_game(self, guild_id: int):
+    async def stop_game(self, guild_id: int):
         """Stops a game in progress for a guild.
 
         :param int guild_id:
         """
 
-        game_state = self._get_game(guild_id)
+        game_state = self.get_game(guild_id)
         game_state.stop_game()
 
-        self._cleanup_game(guild_id)
+        self.__cleanup_game(guild_id)
 
-    async def _process_answer(self, message):
+    async def process_answer(self, message):
         """Called when an answer is received from a user.
 
         :param m message:
         :type m: discord.message.Message
         """
 
-        game_state = self._get_game(message.guild.id)
+        game_state = self.get_game(message.guild.id)
 
         # Don't process the answer if the bot is currently in-between asking
         # questions. Without this multiple people can get the answer right
@@ -138,11 +125,11 @@ class ChoGameMixin():
                 ),
             )
             await asyncio.sleep(SHORT_WAIT_SECS)
-            await self._ask_question(message.channel, game_state)
+            await self.ask_question(message.channel, game_state)
         else:
             LOGGER.debug("Incorrect answer received: %s", message.content)
 
-    async def _ask_question(self, channel, game_state):
+    async def ask_question(self, channel, game_state):
         """Asks a trivia question in a Discord channel.
 
         :param c channel:
@@ -158,22 +145,22 @@ class ChoGameMixin():
         # This check also covers the rare edge-case where a game is stopped and
         # started again within the 10 second window between questions so that
         # the trivia game doesn't duplicate itself.
-        if not self._is_same_game_in_progress(guild_id, game_state):
+        if not self.is_same_game_in_progress(guild_id, game_state):
             return
 
         if game_state.complete:
-            await self._finish_game(channel, game_state)
+            await self.complete_game(channel, game_state)
             return
 
         question = game_state.get_question()
         last_correct_answers_total = game_state.correct_answers_total
-
         game_state.waiting = True
+
         await channel.send(question["text"])
         await asyncio.sleep(LONG_WAIT_SECS)
 
         # Check again as it can happen here too.
-        if not self._is_same_game_in_progress(guild_id, game_state):
+        if not self.is_same_game_in_progress(guild_id, game_state):
             return
 
         # If the correct answer total was not incrememnted, that means that no
@@ -188,9 +175,9 @@ class ChoGameMixin():
                 ),
             )
             await asyncio.sleep(SHORT_WAIT_SECS)
-            await self._ask_question(channel, game_state)
+            await self.ask_question(channel, game_state)
 
-    async def _finish_game(self, channel, game_state):
+    async def complete_game(self, channel, game_state):
         """Outputs the scoreboard and announces the winner of a game.
 
         :param c channel:
@@ -199,14 +186,14 @@ class ChoGameMixin():
         """
 
         guild_id = channel.guild.id
-        self._cleanup_game(guild_id)
+        self.__cleanup_game(guild_id)
 
         score_fmt = "{emoji} <@!{user_id}> - {score} point{suffix}\n"
         scores = list(game_state.scores.items())
 
         # Don't bother making a scoreboard if it's going to be empty. It's
         # better to make fun of everyone for being so bad at the game instead!
-        if len(scores) == 0:
+        if not scores:
             await channel.send(
                 "Well it appears no one won because no one answered a "
                 "*single* question right. You people really don't know much "
@@ -260,15 +247,7 @@ class ChoGameMixin():
                 .format(str(ties + 1), scoreboard)
             )
 
-    def _cleanup_game(self, guild_id: int):
-        """Removes the game state of a guild from memory.
-
-        :param int guild_id:
-        """
-
-        del self.active_games[guild_id]
-
-    def _get_game(self, guild_id: int) -> GameState:
+    def get_game(self, guild_id: int) -> GameState:
         """Retrieves a guild's game state from memory.
 
         :param int guild_id:
@@ -278,7 +257,7 @@ class ChoGameMixin():
 
         return self.active_games[guild_id]
 
-    def _create_game(self, guild_id: int, channel_id: int) -> GameState:
+    def create_game(self, guild_id: int, channel_id: int) -> GameState:
         """Creates a new game state.
 
         :param int guild_id:
@@ -292,10 +271,12 @@ class ChoGameMixin():
             guild_id,
             channel_id=channel_id,
             save_to_db=True)
+
         self.active_games[guild_id] = new_game
+
         return new_game
 
-    def _is_game_in_progress(self, guild_id: int) -> bool:
+    def is_game_in_progress(self, guild_id: int) -> bool:
         """Checks if a game is in progress for a guild.
 
         :param int guild_id:
@@ -305,7 +286,7 @@ class ChoGameMixin():
 
         return guild_id in self.active_games
 
-    def _is_same_game_in_progress(
+    def is_same_game_in_progress(
             self,
             guild_id: int,
             game_state: GameState) -> bool:
@@ -318,6 +299,6 @@ class ChoGameMixin():
         """
 
         return (
-            self._is_game_in_progress(guild_id)
-            and self._get_game(guild_id).uuid == game_state.uuid
+            self.is_game_in_progress(guild_id)
+            and self.get_game(guild_id).uuid == game_state.uuid
         )

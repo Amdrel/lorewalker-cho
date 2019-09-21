@@ -16,8 +16,9 @@
 
 """Contains helper functions to get configuration data for the worker."""
 
-import logging
 import os
+
+import logging
 
 from logging.handlers import RotatingFileHandler
 

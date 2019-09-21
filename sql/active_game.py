@@ -22,7 +22,7 @@ import sqlalchemy as sa
 from sqlalchemy.engine.interfaces import Connectable
 from sqlalchemy.engine.result import ResultProxy
 
-from sql.schema import guilds, active_games
+from sql.schema import GUILDS, ACTIVE_GAMES
 
 LOGGER = logging.getLogger("cho")
 
@@ -36,11 +36,11 @@ def get_incomplete_games(conn: Connectable) -> list:
     :return:
     """
 
-    query = sa.select([guilds.c.discord_guild_id, active_games.c.game_state]) \
+    query = sa.select([GUILDS.c.discord_guild_id, ACTIVE_GAMES.c.game_state]) \
         .select_from(
-            sa.join(active_games, guilds,
-                    active_games.c.guild_id == guilds.c.id)) \
-        .where(active_games.c.game_state['complete'] == "false")
+            sa.join(ACTIVE_GAMES, GUILDS,
+                    ACTIVE_GAMES.c.guild_id == GUILDS.c.id)) \
+        .where(ACTIVE_GAMES.c.game_state['complete'] == "false")
     return conn.execute(query).fetchall()
 
 
@@ -54,13 +54,13 @@ def get_game_state(conn: Connectable, guild_id: int) -> tuple:
     :return:
     """
 
-    query = sa.select([guilds.c.id]) \
-        .where(guilds.c.discord_guild_id == guild_id) \
+    query = sa.select([GUILDS.c.id]) \
+        .where(GUILDS.c.discord_guild_id == guild_id) \
         .limit(1)
     guild_id_fkey = conn.execute(query).first()
 
-    query = sa.select([active_games.c.game_state]) \
-        .where(active_games.c.guild_id == guild_id_fkey[0]) \
+    query = sa.select([ACTIVE_GAMES.c.game_state]) \
+        .where(ACTIVE_GAMES.c.guild_id == guild_id_fkey[0]) \
         .limit(1)
     return conn.execute(query).first()
 
@@ -77,27 +77,27 @@ def save_game_state(conn: Connectable, game_state) -> ResultProxy:
     :return:
     """
 
-    query = sa.select([guilds.c.id]) \
-        .where(guilds.c.discord_guild_id == game_state.guild_id) \
+    query = sa.select([GUILDS.c.id]) \
+        .where(GUILDS.c.discord_guild_id == game_state.guild_id) \
         .limit(1)
     guild_id_fkey = conn.execute(query).first()
 
-    query = sa.select([active_games.c.id]) \
-        .where(active_games.c.guild_id == guild_id_fkey[0]) \
+    query = sa.select([ACTIVE_GAMES.c.id]) \
+        .where(ACTIVE_GAMES.c.guild_id == guild_id_fkey[0]) \
         .limit(1)
     existing_game_id = conn.execute(query).first()
 
     if existing_game_id is not None:
         LOGGER.debug("Updating existing game state.")
 
-        query = active_games.update(None).values({
+        query = ACTIVE_GAMES.update(None).values({
             "game_state": game_state.serialize(),
-        }).where(active_games.c.id == existing_game_id[0])
+        }).where(ACTIVE_GAMES.c.id == existing_game_id[0])
         return conn.execute(query)
     else:
         LOGGER.debug("Creating new game state.")
 
-        query = active_games.insert(None).values({
+        query = ACTIVE_GAMES.insert(None).values({
             "guild_id": guild_id_fkey[0],
             "game_state": game_state.serialize(),
         })
@@ -115,11 +115,11 @@ def clear_game_state(conn: Connectable, guild_id: int) -> ResultProxy:
     :return:
     """
 
-    query = sa.select([guilds.c.id]) \
-        .where(guilds.c.discord_guild_id == guild_id) \
+    query = sa.select([GUILDS.c.id]) \
+        .where(GUILDS.c.discord_guild_id == guild_id) \
         .limit(1)
     guild_id_fkey = conn.execute(query).first()
 
-    query = active_games.delete(None) \
-        .where(active_games.c.guild_id == guild_id_fkey[0])
+    query = ACTIVE_GAMES.delete(None) \
+        .where(ACTIVE_GAMES.c.guild_id == guild_id_fkey[0])
     return conn.execute(query)
