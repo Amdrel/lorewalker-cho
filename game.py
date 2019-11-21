@@ -62,6 +62,9 @@ class GameMixin():
             self.active_games[guild_id] = existing_game_state
 
             guild = self.get_guild(guild_id)
+
+            # FIXME: Deleting a channel between restarts can break resumes for
+            # an entire shard. Check if the channel exists!!! Sleep first.
             if guild:
                 channel = guild.get_channel(existing_game_state.channel_id)
                 asyncio.ensure_future(
@@ -163,7 +166,7 @@ class GameMixin():
         if not self.is_same_game_in_progress(guild_id, game_state):
             return
 
-        # If the correct answer total was not incrememnted, that means that no
+        # If the correct answer total was not incremented, that means that no
         # one answered the question correctly. Give them the answer if so.
         if last_correct_answers_total == game_state.correct_answers_total:
             game_state.waiting = False
