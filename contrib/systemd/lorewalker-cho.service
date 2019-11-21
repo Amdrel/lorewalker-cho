@@ -1,0 +1,12 @@
+[Unit]
+Description=A Discord bot that asks trivia questions related to the game World of Warcraft.
+After=network.target
+Requires=postgresql-11.service
+
+[Service]
+ExecStart=/opt/lorewalker-cho/run.sh --log /var/log/lorewalker-cho/lorewalker-cho.log
+User=cho
+Group=cho
+
+[Install]
+WantedBy=multi-user.target
