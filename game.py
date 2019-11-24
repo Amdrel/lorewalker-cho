@@ -54,21 +54,26 @@ class GameMixin():
             len(incomplete_games))
 
         for guild_id, existing_game in incomplete_games:
-            existing_game_state = GameState(
+            saved_game = GameState(
                 self.engine,
                 guild_id,
                 existing_game=existing_game,
                 save_to_db=True)
-            self.active_games[guild_id] = existing_game_state
+            self.active_games[guild_id] = saved_game
+
+            # Resume the game if both the guild and the channel the game was
+            # being played in both still exist, and either could have been
+            # deleted in-between the shard being stopped and resumed.
 
             guild = self.get_guild(guild_id)
+            if not guild:
+                continue
 
-            # FIXME: Deleting a channel between restarts can break resumes for
-            # an entire shard. Check if the channel exists!!! Sleep first.
-            if guild:
-                channel = guild.get_channel(existing_game_state.channel_id)
-                asyncio.ensure_future(
-                    self.ask_question(channel, existing_game_state))
+            channel = guild.get_channel(saved_game.channel_id)
+            if not channel:
+                continue
+
+            asyncio.ensure_future(self.ask_question(channel, saved_game))
 
     async def start_game(self, guild: Guild, channel: TextChannel):
         """Starts a new trivia game.
