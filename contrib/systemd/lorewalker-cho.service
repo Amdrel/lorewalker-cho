@@ -4,7 +4,7 @@ After=network.target
 Requires=postgresql-11.service
 
 [Service]
-ExecStart=/opt/lorewalker-cho/run.sh --log /var/log/lorewalker-cho/lorewalker-cho.log
+ExecStart=/opt/lorewalker-cho/lorewalker-cho.sh --log /var/log/lorewalker-cho/lorewalker-cho.log
 User=cho
 Group=cho
 
