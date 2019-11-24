@@ -21,7 +21,10 @@
 import argparse
 import logging
 import os
+
+import redis
 import sqlalchemy as sa
+
 import config
 
 from lorewalker_cho import LorewalkerCho
@@ -58,7 +61,10 @@ def main():
     engine.connect()
     LOGGER.info("Started connection pool with size: %d", SQLALCHEMY_POOL_SIZE)
 
-    discord_client = LorewalkerCho(engine)
+    redis_url = os.environ.get("CHO_REDIS_URL") or "redis://localhost:6379"
+    redis_client = redis.Redis.from_url(redis_url)
+
+    discord_client = LorewalkerCho(engine, redis_client)
     discord_client.run(DISCORD_TOKEN)
     LOGGER.info("Shutting down... good bye!")
 

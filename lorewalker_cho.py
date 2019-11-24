@@ -18,13 +18,16 @@
 
 import asyncio
 import logging
+import shlex
 import traceback
 
 from commands import CommandsMixin
 
 import discord
+import redis
 
 from discord.message import Message
+from redis import Redis
 from sqlalchemy.engine import Engine
 
 import utils
@@ -38,18 +41,21 @@ LOGGER = logging.getLogger("cho")
 class LorewalkerCho(CommandsMixin, GameMixin, discord.Client):
     """Discord client wrapper that uses functionality from cho.py."""
 
-    def __init__(self, engine: Engine):
+    def __init__(self, engine: Engine, redis_client: Redis):
         """Initializes the ChoClient with a sqlalchemy connection pool.
 
         :param e engine: SQLAlchemy engine to make queries with.
+        :param r redis_client: A redis client for caching non-persistant data.
         :type e: sqlalchemy.engine.Engine
-        :rtype: ChoClient
+        :type r: redis.Redis
+        :rtype: LorewalkerCho
         :return:
         """
 
         super().__init__()
 
         self.engine = engine
+        self.redis = redis_client
         self.guild_configs = {}
         self.active_games = {}
 
@@ -58,9 +64,7 @@ class LorewalkerCho(CommandsMixin, GameMixin, discord.Client):
 
         LOGGER.info("Client logged in as \"%s\"", self.user)
 
-        await self.change_presence(
-            status=discord.Status.online,
-            activity=discord.Game(name="!cho help"))
+        await self.set_status()
 
         asyncio.ensure_future(self.resume_incomplete_games())
 
@@ -132,10 +136,10 @@ class LorewalkerCho(CommandsMixin, GameMixin, discord.Client):
         else:
             _, config = guild_query_results
 
-        # TODO: Come up with a better way to split up arguments. If we want to
-        # support flags in the future this might need to be done using a real
-        # argument parser.
-        args = message.content.split()
+        # Split arguments as if they're in a shell-like syntax using shlex.
+        # This allows for arguments to be quoted so strings with spaces can be
+        # included.
+        args = shlex.split(message.content)
 
         # Handle cho invocations with no command.
         if len(args) < 2:
@@ -189,3 +193,21 @@ class LorewalkerCho(CommandsMixin, GameMixin, discord.Client):
 
         if utils.is_message_from_trivia_channel(message, config):
             await self.process_answer(message)
+
+    async def set_status(self):
+        """Sets the bot status to the saved one, or the default if missing."""
+
+        status = "!cho help"
+
+        try:
+            saved_status = self.redis.get("cho:status")
+            if saved_status:
+                status = saved_status.decode()
+        except redis.ConnectionError as exc:
+            LOGGER.warning(exc)
+
+        LOGGER.debug("Setting status to \"%s\"", status)
+
+        await self.change_presence(
+            status=discord.Status.online,
+            activity=discord.Game(name=status))

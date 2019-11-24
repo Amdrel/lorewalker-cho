@@ -17,6 +17,7 @@
 """Core code that controls Cho's behavior."""
 
 import logging
+import os
 
 from collections import OrderedDict
 
@@ -34,19 +35,24 @@ GLOBAL_COMMANDS = OrderedDict()
 CHANNEL_COMMANDS = OrderedDict()
 
 
-def cho_command(command, kind="global", admin_only=False):
+def cho_command(command, kind="global", admin_only=False, owner_only=False):
     """Marks a function as a runnable command."""
 
     def decorator(func):
         def wrapper(*args, **kwargs):
-            if admin_only:
+            if owner_only:
                 message = args[1]
-
+                if not is_owner(message.author):
+                    return message.channel.send(
+                        "Sorry, only the bot owner can run that command."
+                    )
+                return func(*args, **kwargs)
+            elif admin_only:
+                message = args[1]
                 if not is_admin(message.author, message.channel):
                     return message.channel.send(
                         "Sorry, only administrators run that command."
                     )
-
                 return func(*args, **kwargs)
 
             return func(*args, **kwargs)
@@ -105,6 +111,25 @@ def is_admin(member: Member, channel: TextChannel) -> bool:
     """
 
     return channel.permissions_for(member).administrator
+
+
+def is_owner(member: Member) -> bool:
+    """Checks if a passed in Member is the bot owner (me!).
+
+    :param m member:
+    :type m: discord.member.Member
+    :rtype: bool
+    :return:
+    """
+
+    is_bot_owner = False
+
+    try:
+        is_bot_owner = member.id == int(os.environ.get("CHO_OWNER", 0))
+    except ValueError:
+        pass
+
+    return is_bot_owner
 
 
 def is_message_from_trivia_channel(message: Message, config: dict) -> bool:

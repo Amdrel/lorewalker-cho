@@ -20,19 +20,21 @@ import logging
 import re
 
 import discord
+import redis
 import sql.guild
 
 from utils import cho_command
 
-CMD_START = "start"
-CMD_STOP = "stop"
+CMD_HELP = "help"
 CMD_SCOREBOARD = "scoreboard"
 CMD_SET_CHANNEL = "set-channel"
 CMD_SET_PREFIX = "set-prefix"
-CMD_HELP = "help"
+CMD_SET_STATUS = "set-status"
+CMD_START = "start"
+CMD_STOP = "stop"
 
-DISCORD_CHANNEL_REGEX = re.compile("^<#([0-9]*)>$")
-ALLOWED_PREFIXES = set(["!", "&", "?", "|", "^", "%"])
+DISCORD_CHANNEL_REGEX = re.compile(r"^<#([0-9]*)>$")
+ALLOWED_PREFIXES = {"!", "&", "?", "|", "^", "%"}
 
 LOGGER = logging.getLogger("cho")
 
@@ -202,7 +204,7 @@ class CommandsMixin():
 
         if len(args) < 3:
             await message.channel.send(
-                "Please specify a channel when using \"set-channel\"."
+                f"Please specify a channel when using \"{CMD_SET_CHANNEL}\"."
             )
             return
 
@@ -237,7 +239,7 @@ class CommandsMixin():
 
         if len(args) < 3:
             await message.channel.send(
-                "Please specify a prefix when using \"set-prefix\"."
+                f"Please specify a prefix when using \"{CMD_SET_PREFIX}\"."
             )
             return
 
@@ -254,6 +256,40 @@ class CommandsMixin():
         config["prefix"] = new_prefix
         sql.guild.update_guild_config(self.engine, guild_id, config)
 
-        await message.channel.send(
-            "My prefix is now in \"{}\".".format(new_prefix)
-        )
+        await message.channel.send(f"My prefix is now \"{new_prefix}\".")
+
+    @cho_command(CMD_SET_STATUS, owner_only=True)
+    async def handle_set_status(self, message, args, config):
+        """Updates the bot's status across all shards.
+
+        :param m message:
+        :param list args:
+        :param dict config:
+        :type m: discord.message.Message
+        """
+
+        if len(args) < 3:
+            await message.channel.send(
+                f"Please specify a status when using \"{CMD_SET_STATUS}\"."
+            )
+            return
+        elif len(args) > 3:
+            await message.channel.send(
+                f"Too many arguments for \"{CMD_SET_STATUS}\". Surround your "
+                f"status with double quotes to include spaces."
+            )
+            return
+
+        new_status = args[2]
+
+        try:
+            self.redis.set("cho:status", new_status)
+            await self.set_status()
+        except redis.ConnectionError as exc:
+            LOGGER.warning(exc)
+
+            await message.channel.send(
+                "Unable to set status due to a redis connection error."
+            )
+        else:
+            await message.channel.send(f"My status is now \"{new_status}\".")
