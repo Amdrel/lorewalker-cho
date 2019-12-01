@@ -43,8 +43,9 @@ def setup_logging(debug=False, logpath: str = None):
     """
 
     log_level = "DEBUG" if debug else "INFO"
-    fmt = "%(asctime)-15s [%(levelname)s] %(message)s"
-    logging.basicConfig(format=fmt)
+    stdout_fmt = "[%(levelname)s] %(message)s"
+    file_fmt = "%(asctime)-15s [%(levelname)s] %(message)s"
+    logging.basicConfig(format=stdout_fmt)
 
     logger = logging.getLogger("cho")
     logger.setLevel(log_level)
@@ -58,7 +59,7 @@ def setup_logging(debug=False, logpath: str = None):
             mode="a",
             maxBytes=10000000,
             backupCount=10)
-        handler.setFormatter(logging.Formatter(fmt))
+        handler.setFormatter(logging.Formatter(file_fmt))
         handler.setLevel(log_level)
 
         logger.addHandler(handler)
