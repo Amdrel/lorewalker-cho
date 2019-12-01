@@ -22,7 +22,7 @@ import sqlalchemy as sa
 from sqlalchemy.engine.interfaces import Connectable
 from sqlalchemy.engine.result import ResultProxy
 
-from sql.schema import GUILDS, ACTIVE_GAMES
+from lorewalker_cho.sql.schema import GUILDS, ACTIVE_GAMES
 
 LOGGER = logging.getLogger("cho")
 

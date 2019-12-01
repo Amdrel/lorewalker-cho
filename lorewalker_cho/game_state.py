@@ -22,10 +22,10 @@ import uuid
 
 from sqlalchemy.engine import Engine
 
-import utils
-import sql.active_game
+import lorewalker_cho.utils as utils
+import lorewalker_cho.sql.active_game as sql_active_game
 
-from data.questions import DEFAULT_QUESTIONS
+from lorewalker_cho.data.questions import DEFAULT_QUESTIONS
 
 CURRENT_REVISION = 0
 
@@ -81,7 +81,7 @@ class GameState():
         self.waiting = False
 
         if self.save_to_db:
-            sql.active_game.save_game_state(self.engine, self)
+            sql_active_game.save_game_state(self.engine, self)
 
     @staticmethod
     def __select_questions(questions: list, count=10) -> list:
@@ -123,7 +123,7 @@ class GameState():
         self.__complete_game()
 
         if self.save_to_db:
-            sql.active_game.save_game_state(self.engine, self)
+            sql_active_game.save_game_state(self.engine, self)
 
     def step(self):
         """Advances the game forward to the next question.
@@ -139,7 +139,7 @@ class GameState():
             self.__complete_game()
 
         if self.save_to_db:
-            sql.active_game.save_game_state(self.engine, self)
+            sql_active_game.save_game_state(self.engine, self)
 
     def bump_score(self, user_id: int, amount=1):
         """Increases the score of a player by an amount.

@@ -22,10 +22,10 @@ import logging
 from discord.channel import TextChannel
 from discord.guild import Guild
 
-import sql.guild
-import sql.scoreboard
+import lorewalker_cho.sql.active_game as sql_active_game
+import lorewalker_cho.sql.scoreboard as sql_scoreboard
 
-from game_state import GameState
+from lorewalker_cho.game_state import GameState
 
 SHORT_WAIT_SECS = 5
 LONG_WAIT_SECS = 30
@@ -47,7 +47,7 @@ class GameMixin():
     async def resume_incomplete_games(self):
         """Resumes all inactive games, usually caused by the bot going down."""
 
-        incomplete_games = sql.active_game.get_incomplete_games(self.engine)
+        incomplete_games = sql_active_game.get_incomplete_games(self.engine)
 
         LOGGER.info(
             "Found %d incomplete games that need to be resumed",
@@ -214,7 +214,7 @@ class GameMixin():
         ties = 0
         scoreboard = ""
 
-        guild_scoreboard = sql.scoreboard.get_scoreboard(self.engine, guild_id)
+        guild_scoreboard = sql_scoreboard.get_scoreboard(self.engine, guild_id)
         if not guild_scoreboard:
             guild_scoreboard = {}
         else:
@@ -238,7 +238,7 @@ class GameMixin():
             guild_member_score += score
             guild_scoreboard[str(user_id)] = guild_member_score
 
-        sql.scoreboard.save_scoreboard(self.engine, guild_id, guild_scoreboard)
+        sql_scoreboard.save_scoreboard(self.engine, guild_id, guild_scoreboard)
 
         if ties == 0:
             await channel.send(

@@ -21,9 +21,11 @@ import re
 
 import discord
 import redis
-import sql.guild
 
-from utils import cho_command
+import lorewalker_cho.sql.guild as sql_guild
+import lorewalker_cho.sql.scoreboard as sql_scoreboard
+
+from lorewalker_cho.utils import cho_command
 
 CMD_HELP = "help"
 CMD_SCOREBOARD = "scoreboard"
@@ -162,7 +164,7 @@ class CommandsMixin():
         guild_id = message.guild.id
         guild = self.get_guild(guild_id)
 
-        guild_scoreboard = sql.scoreboard.get_scoreboard(self.engine, guild_id)
+        guild_scoreboard = sql_scoreboard.get_scoreboard(self.engine, guild_id)
         if not guild_scoreboard:
             guild_scoreboard = {}
         else:
@@ -221,7 +223,7 @@ class CommandsMixin():
             return
 
         config["trivia_channel"] = int(trivia_channel_re_match.group(1))
-        sql.guild.update_guild_config(self.engine, guild_id, config)
+        sql_guild.update_guild_config(self.engine, guild_id, config)
 
         await message.channel.send(
             "The trivia channel is now in {}.".format(trivia_channel_id)
@@ -254,7 +256,7 @@ class CommandsMixin():
             return
 
         config["prefix"] = new_prefix
-        sql.guild.update_guild_config(self.engine, guild_id, config)
+        sql_guild.update_guild_config(self.engine, guild_id, config)
 
         await message.channel.send(f"My prefix is now \"{new_prefix}\".")
 

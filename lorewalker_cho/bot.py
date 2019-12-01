@@ -21,8 +21,6 @@ import logging
 import shlex
 import traceback
 
-from commands import CommandsMixin
-
 import discord
 import redis
 
@@ -30,10 +28,11 @@ from discord.message import Message
 from redis import Redis
 from sqlalchemy.engine import Engine
 
-import utils
-import sql.guild
+import lorewalker_cho.utils as utils
+import lorewalker_cho.sql.guild as sql_guild
 
-from game import GameMixin
+from lorewalker_cho.commands import CommandsMixin
+from lorewalker_cho.game import GameMixin
 
 LOGGER = logging.getLogger("cho")
 
@@ -99,7 +98,7 @@ class LorewalkerCho(CommandsMixin, GameMixin, discord.Client):
 
         # Gets the configured prefix if there is one. If there isn't one a
         # default that's hardcoded is used instead.
-        results = sql.guild.get_guild(self.engine, guild_id)
+        results = sql_guild.get_guild(self.engine, guild_id)
         if results:
             _, config = results
             prefix = utils.get_prefix(config)
@@ -128,10 +127,10 @@ class LorewalkerCho(CommandsMixin, GameMixin, discord.Client):
 
         # This is a good opportunity to make sure the guild we're getting a
         # command from is setup properly in the database.
-        guild_query_results = sql.guild.get_guild(self.engine, guild_id)
+        guild_query_results = sql_guild.get_guild(self.engine, guild_id)
         if not guild_query_results:
             LOGGER.info("Got command from new guild: %s", guild_id)
-            sql.guild.create_guild(self.engine, guild_id)
+            sql_guild.create_guild(self.engine, guild_id)
             config = {}
         else:
             _, config = guild_query_results
@@ -185,7 +184,7 @@ class LorewalkerCho(CommandsMixin, GameMixin, discord.Client):
 
         guild_id = guild_id = message.guild.id
 
-        guild_query_results = sql.guild.get_guild(self.engine, guild_id)
+        guild_query_results = sql_guild.get_guild(self.engine, guild_id)
         if guild_query_results:
             _, config = guild_query_results
         else:

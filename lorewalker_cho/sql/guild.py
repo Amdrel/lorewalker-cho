@@ -20,7 +20,8 @@ import sqlalchemy as sa
 
 from sqlalchemy.engine.interfaces import Connectable
 from sqlalchemy.engine.result import ResultProxy
-from sql.schema import GUILDS
+
+from lorewalker_cho.sql.schema import GUILDS
 
 
 def get_guild(conn: Connectable, guild_id: int) -> tuple:

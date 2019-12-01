@@ -15,19 +15,25 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+# pylint: disable=wrong-import-position
 
 """Command-line interface to start cho."""
 
 import argparse
 import logging
 import os
+import sys
 
 import redis
 import sqlalchemy as sa
 
-import config
+PARENT_PATH = os.path.dirname((os.path.dirname(os.path.realpath(__file__))))
+sys.path.append(PARENT_PATH)
 
-from lorewalker_cho import LorewalkerCho
+import lorewalker_cho.config as config
+
+from lorewalker_cho.bot import LorewalkerCho
 
 DISCORD_TOKEN = os.environ["CHO_DISCORD_TOKEN"]
 SQLALCHEMY_POOL_SIZE = int(os.environ.get("SQLALCHEMY_POOL_SIZE", 6))
@@ -39,7 +45,8 @@ LOGGER = logging.getLogger("cho")
 def main():
     """Entrypoint for Cho on the CLI."""
 
-    parser = argparse.ArgumentParser(description="Start a Cho Trivia worker.")
+    parser = argparse.ArgumentParser(
+        description="Start a Lorewalker Cho worker.")
     parser.add_argument("--debug", action='store_true', default=False,
                         help="Enable debug logging.")
     parser.add_argument("--log", help="Specify a log file path to log to.")
