@@ -25,6 +25,7 @@ import logging
 import os
 import sys
 
+import discord
 import redis
 import sqlalchemy as sa
 
@@ -33,7 +34,7 @@ sys.path.append(PARENT_PATH)
 
 import lorewalker_cho.config as config
 
-from lorewalker_cho.bot import LorewalkerCho
+from lorewalker_cho.bot import build_client
 
 DISCORD_TOKEN = os.environ["CHO_DISCORD_TOKEN"]
 SQLALCHEMY_POOL_SIZE = int(os.environ.get("SQLALCHEMY_POOL_SIZE", 6))
@@ -47,15 +48,28 @@ def main():
 
     parser = argparse.ArgumentParser(
         description="Start a Lorewalker Cho worker.")
-    parser.add_argument("--debug", action='store_true', default=False,
-                        help="Enable debug logging.")
-    parser.add_argument("--log", help="Specify a log file path to log to.")
-    parser.add_argument("--shard", help="Discord shard (unused for now).")
+    parser.add_argument(
+        "-d", "--debug", action='store_true', default=False,
+        help="Enable debug logging.")
+    parser.add_argument(
+        "-l", "--log", help="Specify a log file path to log to.")
+    parser.add_argument(
+        "--autoshard", action='store_true', default=False,
+        help="Enable autosharding")
+    parser.add_argument(
+        "-c", "--shard-count", default=1,
+        help="Number of shards for sharding.")
+    parser.add_argument(
+        "-s", "--shard-id", default=0, help="Discord shard id.")
     args = parser.parse_args()
 
     config.setup_logging(debug=args.debug, logpath=args.log)
 
-    LOGGER.info("Starting Lorewalker Cho worker (shard ?).")
+    LOGGER.info(
+        "Starting Lorewalker Cho worker (%s)",
+        ("autosharded" if args.autoshard
+         else "shard {}".format(
+             args.shard_id if args.shard_id is not None else "?")))
     LOGGER.debug("Debug logging activated.")
 
     # Connect to the postgres database and setup connection pools.
@@ -71,8 +85,22 @@ def main():
     redis_url = os.environ.get("CHO_REDIS_URL") or "redis://localhost:6379"
     redis_client = redis.Redis.from_url(redis_url)
 
-    discord_client = LorewalkerCho(engine, redis_client)
+    # We use a special function called 'build_client' that will dynamically set
+    # the base class of our bot's client class. We need to do this to make
+    # autosharding configurable as that's controlled by a separate class.
+    base_class = (
+        discord.AutoShardedClient if args.autoshard else discord.Client)
+    client_class = build_client(base_class)
+
+    shard_id = (
+        int(args.shard_id) if args.shard_id is not None else None)
+    shard_count = (
+        int(args.shard_count) if args.shard_count is not None else None)
+
+    discord_client = client_class(
+        engine, redis_client, shard_id=shard_id, shard_count=shard_count)
     discord_client.run(DISCORD_TOKEN)
+
     LOGGER.info("Shutting down... good bye!")
 
 

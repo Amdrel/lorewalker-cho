@@ -37,176 +37,192 @@ from lorewalker_cho.game import GameMixin
 LOGGER = logging.getLogger("cho")
 
 
-class LorewalkerCho(CommandsMixin, GameMixin, discord.Client):
-    """Discord client wrapper that uses functionality from cho.py."""
+def build_client(base):
+    """Create a LorewalkerChoClient class with the specified base class.
 
-    def __init__(self, engine: Engine, redis_client: Redis):
-        """Initializes the ChoClient with a sqlalchemy connection pool.
+    The autosharded client is derived from the normal client. Because it's
+    setup this way, we need to make the base class the autosharded client at
+    runtime if the flag is set.
 
-        :param e engine: SQLAlchemy engine to make queries with.
-        :param r redis_client: A redis client for caching non-persistant data.
-        :type e: sqlalchemy.engine.Engine
-        :type r: redis.Redis
-        :rtype: LorewalkerCho
-        :return:
-        """
+    :param d base:
+    :type d: discord.Client
+    :rtype d:
+    :return:
+    """
 
-        super().__init__()
+    class LorewalkerChoClient(CommandsMixin, GameMixin, base):
+        """Discord client wrapper that uses functionality from cho.py."""
 
-        self.engine = engine
-        self.redis = redis_client
-        self.guild_configs = {}
-        self.active_games = {}
+        def __init__(
+                self, engine: Engine, redis_client: Redis, *args, **kwargs):
+            """Initializes the ChoClient with a sqlalchemy connection pool.
 
-    async def on_ready(self):
-        """Called when the bot has successfully connected to Discord."""
+            :param e engine: SQLAlchemy engine to make queries with.
+            :param r redis_client: Redis for caching non-persistant data.
+            :type e: sqlalchemy.engine.Engine
+            :type r: redis.Redis
+            :rtype: LorewalkerCho
+            :return:
+            """
 
-        LOGGER.info("Client logged in as \"%s\"", self.user)
+            super().__init__(*args, **kwargs)
 
-        await self.set_status()
+            self.engine = engine
+            self.redis = redis_client
+            self.guild_configs = {}
+            self.active_games = {}
 
-        asyncio.ensure_future(self.resume_incomplete_games())
+        async def on_ready(self):
+            """Called when the bot has successfully connected to Discord."""
 
-    async def on_message(self, message: Message):
-        """Called whenever the bot receives a message from Discord.
+            LOGGER.info("Client logged in as \"%s\"", self.user)
 
-        :param m message:
-        :type m: discord.message.Message
-        """
+            await self.set_status()
 
-        # Ignore messages from self. Let's not risk going in a loop here.
-        if self.user.id == message.author.id:
-            return
+            asyncio.ensure_future(self.resume_incomplete_games())
 
-        LOGGER.debug(
-            "Message from \"%s\": %s",
-            message.author, message.content
-        )
+        async def on_message(self, message: Message):
+            """Called whenever the bot receives a message from Discord.
 
-        # Don't accept direct messages at this time. I might circle back later
-        # and add support for private trivia sessions, but it's not a priority
-        # for me right now.
-        if message.guild is None:
-            await message.channel.send(
-                "Oh hello there, I don't currently do private trivia "
-                "sessions. If you want to start a game, call for me in a "
-                "Discord server."
+            :param m message:
+            :type m: discord.message.Message
+            """
+
+            # Ignore messages from self. Let's not risk going in a loop here.
+            if self.user.id == message.author.id:
+                return
+
+            LOGGER.debug(
+                "Message from \"%s\": %s",
+                message.author, message.content
             )
-            return
 
-        guild_id = message.guild.id
+            # Don't accept direct messages at this time. I might circle back
+            # later and add support for private trivia sessions, but it's not a
+            # priority for me right now.
+            if message.guild is None:
+                await message.channel.send(
+                    "Oh hello there, I don't currently do private trivia "
+                    "sessions. If you want to start a game, call for me in a "
+                    "Discord server."
+                )
+                return
 
-        # Gets the configured prefix if there is one. If there isn't one a
-        # default that's hardcoded is used instead.
-        results = sql_guild.get_guild(self.engine, guild_id)
-        if results:
-            _, config = results
-            prefix = utils.get_prefix(config)
-        else:
-            prefix = utils.get_prefix(None)
+            guild_id = message.guild.id
 
-        if utils.is_command(message, prefix):
-            await self.handle_command(message)
-        elif self.is_game_in_progress(guild_id):
-            await self.handle_message_response(message)
+            # Gets the configured prefix if there is one. If there isn't one a
+            # default that's hardcoded is used instead.
+            results = sql_guild.get_guild(self.engine, guild_id)
+            if results:
+                _, config = results
+                prefix = utils.get_prefix(config)
+            else:
+                prefix = utils.get_prefix(None)
 
-    async def on_error(self, event_name, *args, **kwargs):
-        """Logs exceptions to the bot's log."""
+            if utils.is_command(message, prefix):
+                await self.handle_command(message)
+            elif self.is_game_in_progress(guild_id):
+                await self.handle_message_response(message)
 
-        stack_trace = traceback.format_exc()
-        LOGGER.error("Received uncaught exception:\n\n%s", stack_trace)
+        async def on_error(self, event_name, *args, **kwargs):
+            """Logs exceptions to the bot's log."""
 
-    async def handle_command(self, message):
-        """Called when a Cho command is received from a user.
+            stack_trace = traceback.format_exc()
+            LOGGER.error("Received uncaught exception:\n\n%s", stack_trace)
 
-        :param m message:
-        :type m: discord.message.Message
-        """
+        async def handle_command(self, message):
+            """Called when a Cho command is received from a user.
 
-        guild_id = message.guild.id
+            :param m message:
+            :type m: discord.message.Message
+            """
 
-        # This is a good opportunity to make sure the guild we're getting a
-        # command from is setup properly in the database.
-        guild_query_results = sql_guild.get_guild(self.engine, guild_id)
-        if not guild_query_results:
-            LOGGER.info("Got command from new guild: %s", guild_id)
-            sql_guild.create_guild(self.engine, guild_id)
-            config = {}
-        else:
-            _, config = guild_query_results
+            guild_id = message.guild.id
 
-        # Split arguments as if they're in a shell-like syntax using shlex.
-        # This allows for arguments to be quoted so strings with spaces can be
-        # included.
-        args = shlex.split(message.content)
+            # This is a good opportunity to make sure the guild we're getting a
+            # command from is setup properly in the database.
+            guild_query_results = sql_guild.get_guild(self.engine, guild_id)
+            if not guild_query_results:
+                LOGGER.info("Got command from new guild: %s", guild_id)
+                sql_guild.create_guild(self.engine, guild_id)
+                config = {}
+            else:
+                _, config = guild_query_results
 
-        # Handle cho invocations with no command.
-        if len(args) < 2:
+            # Split arguments as if they're in a shell-like syntax using shlex.
+            # This allows for arguments to be quoted so strings with spaces can
+            # be included.
+            args = shlex.split(message.content)
+
+            # Handle cho invocations with no command.
+            if len(args) < 2:
+                await message.channel.send(
+                    "You didn't specify a command. If you want to "
+                    "start a game use the \"start\" command."
+                )
+                return
+
+            command = args[1].lower()
+
+            # Process commands that are marked for global usage.
+            for global_command, func in utils.GLOBAL_COMMANDS.items():
+                if global_command == command:
+                    await func(self, message, args, config)
+                    return
+
+            # Anything not handled must be done in the configured channel.
+            if not utils.is_message_from_trivia_channel(message, config):
+                await message.channel.send(
+                    "Sorry, I can't be summoned into this channel. Please go "
+                    "to the trivia channel for this server."
+                )
+                return
+
+            # Process commands that are marked for channel-only usage.
+            for channel_command, func in utils.CHANNEL_COMMANDS.items():
+                if channel_command == command:
+                    await func(self, message, args, config)
+                    return
+
             await message.channel.send(
-                "You didn't specify a command. If you want to "
+                "I'm afraid I don't know that command. If you want to "
                 "start a game use the \"start\" command."
             )
-            return
 
-        command = args[1].lower()
+        async def handle_message_response(self, message: Message):
+            """Processes a non-command message received during an active game.
 
-        # Process commands that are marked for global usage.
-        for global_command, func in utils.GLOBAL_COMMANDS.items():
-            if global_command == command:
-                await func(self, message, args, config)
-                return
+            :param m message:
+            :type m: discord.message.Message
+            """
 
-        # Anything not handled above must be done in the configured channel.
-        if not utils.is_message_from_trivia_channel(message, config):
-            await message.channel.send(
-                "Sorry, I can't be summoned into this channel. Please go "
-                "to the trivia channel for this server."
-            )
-            return
+            guild_id = guild_id = message.guild.id
 
-        # Process commands that are marked for channel-only usage.
-        for channel_command, func in utils.CHANNEL_COMMANDS.items():
-            if channel_command == command:
-                await func(self, message, args, config)
-                return
+            guild_query_results = sql_guild.get_guild(self.engine, guild_id)
+            if guild_query_results:
+                _, config = guild_query_results
+            else:
+                config = {}
 
-        await message.channel.send(
-            "I'm afraid I don't know that command. If you want to "
-            "start a game use the \"start\" command."
-        )
+            if utils.is_message_from_trivia_channel(message, config):
+                await self.process_answer(message)
 
-    async def handle_message_response(self, message: Message):
-        """Processes a non-command message received during an active game.
+        async def set_status(self):
+            """Sets bot status to the saved one, or the default if missing."""
 
-        :param m message:
-        :type m: discord.message.Message
-        """
+            status = "!cho help"
 
-        guild_id = guild_id = message.guild.id
+            try:
+                saved_status = self.redis.get("cho:status")
+                if saved_status:
+                    status = saved_status.decode()
+            except redis.ConnectionError as exc:
+                LOGGER.warning(exc)
 
-        guild_query_results = sql_guild.get_guild(self.engine, guild_id)
-        if guild_query_results:
-            _, config = guild_query_results
-        else:
-            config = {}
+            LOGGER.debug("Setting status to \"%s\"", status)
 
-        if utils.is_message_from_trivia_channel(message, config):
-            await self.process_answer(message)
+            await self.change_presence(
+                status=discord.Status.online,
+                activity=discord.Game(name=status))
 
-    async def set_status(self):
-        """Sets the bot status to the saved one, or the default if missing."""
-
-        status = "!cho help"
-
-        try:
-            saved_status = self.redis.get("cho:status")
-            if saved_status:
-                status = saved_status.decode()
-        except redis.ConnectionError as exc:
-            LOGGER.warning(exc)
-
-        LOGGER.debug("Setting status to \"%s\"", status)
-
-        await self.change_presence(
-            status=discord.Status.online,
-            activity=discord.Game(name=status))
+    return LorewalkerChoClient
