@@ -28,7 +28,7 @@ source ./env.sh
 alembic upgrade head
 
 # Run the bot.
-./run.sh
+./lorewalker-cho.sh
 
 # Done!
 ```
