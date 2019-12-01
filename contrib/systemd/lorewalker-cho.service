@@ -5,6 +5,8 @@ Requires=postgresql-11.service
 
 [Service]
 ExecStart=/opt/lorewalker-cho/lorewalker-cho.sh --log /var/log/lorewalker-cho/lorewalker-cho.log
+Restart=always
+RestartSec=3
 User=cho
 Group=cho
 
